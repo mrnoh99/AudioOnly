@@ -4,3 +4,6 @@
 build/
 DerivedData/
 *.xcodeproj/xcuserdata/
+# iOS: XcodeGen이 생성하는 파일
+iOS/*.xcodeproj/
+iOS/AudioOnlyiOS/Info.plist
