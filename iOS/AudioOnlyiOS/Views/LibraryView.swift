@@ -4,6 +4,15 @@ import SwiftUI
 struct LibraryView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var player: AudioPlayer
+    @State private var query = ""
+
+    private var filteredLibrary: [LibraryItem] {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return model.library }
+        return model.library.filter {
+            $0.name.localizedCaseInsensitiveContains(text) || ($0.folder ?? "").localizedCaseInsensitiveContains(text)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,11 +38,14 @@ struct LibraryView: View {
                         Text("아직 추출한 오디오가 없습니다.")
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(model.library) { item in
+                    ForEach(filteredLibrary) { item in
                         LibraryRowView(item: item)
+                            // iPad: 다른 앱(파일, 메일, GarageBand …)으로 끌어다 놓기
+                            .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
                     }
                     .onDelete { offsets in
-                        let items = offsets.map { model.library[$0] }
+                        let visible = filteredLibrary
+                        let items = offsets.map { visible[$0] }
                         if let current = player.current, items.contains(current) {
                             player.stop()
                         }
@@ -41,6 +53,7 @@ struct LibraryView: View {
                     }
                 }
             }
+            .searchable(text: $query, prompt: "저장된 오디오 검색")
             .navigationTitle("보관함")
             .refreshable { model.refreshLibrary() }
             .onAppear { model.refreshLibrary() }
@@ -55,6 +68,7 @@ struct LibraryView: View {
 
 struct LibraryRowView: View {
     @EnvironmentObject private var player: AudioPlayer
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let item: LibraryItem
 
     private var isCurrent: Bool { player.current == item }
@@ -74,6 +88,9 @@ struct LibraryRowView: View {
                 HStack(spacing: 6) {
                     Text(item.url.pathExtension.uppercased())
                     Text(item.sizeText)
+                    if sizeClass == .regular {
+                        Text(item.modified, style: .date)
+                    }
                     if let folder = item.folder {
                         Label(folder, systemImage: "folder").lineLimit(1)
                     }
@@ -219,5 +236,33 @@ struct MiniPlayerView: View {
     private func format(_ time: TimeInterval) -> String {
         let total = Int(time.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// iPad 가로 화면에서 입력 화면 옆에 붙는 작업 패널
+struct JobsPanelView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if model.jobs.isEmpty {
+                    Text("추출 작업이 여기에 표시됩니다.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(model.jobs) { job in
+                    JobRowView(job: job)
+                }
+            }
+            .listStyle(.plain)
+            .navigationTitle("작업")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("완료 항목 지우기") { model.clearFinished() }
+                        .disabled(!model.jobs.contains { $0.status.isFinished })
+                }
+            }
+        }
     }
 }

@@ -51,7 +51,7 @@ struct URLInputView: View {
                 } header: {
                     Text("YouTube 영상 주소 (한 줄에 하나)")
                 } footer: {
-                    Text("YouTube 앱에서 공유 → 링크 복사 후 붙여넣으세요. 인식된 영상: \(videoIDs.count)개")
+                    Text("YouTube 앱에서 공유 → 링크 복사 후 붙여넣거나, Safari에서 링크를 이 화면으로 끌어다 놓으세요. 인식된 영상: \(videoIDs.count)개")
                 }
 
                 Section {
@@ -61,11 +61,18 @@ struct URLInputView: View {
                         Label("오디오 추출 (\(model.format.displayName))", systemImage: "waveform")
                             .frame(maxWidth: .infinity)
                     }
+                    .keyboardShortcut(.return, modifiers: .command)
                     .disabled(videoIDs.isEmpty)
                     if let message {
                         Text(message).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
+            }
+            .dropDestination(for: URL.self) { urls, _ in
+                let links = urls.filter { !$0.isFileURL }.map(\.absoluteString)
+                guard !links.isEmpty else { return false }
+                text = ([text].filter { !$0.isEmpty } + links).joined(separator: "\n")
+                return true
             }
             .navigationTitle("YouTube 주소")
             .toolbar {
@@ -89,6 +96,7 @@ struct URLInputView: View {
 /// YouTube 재생목록
 struct PlaylistInputView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var url = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -145,6 +153,15 @@ struct PlaylistInputView: View {
                                         .font(.caption.monospacedDigit())
                                         .foregroundStyle(.secondary)
                                         .frame(minWidth: 24, alignment: .trailing)
+                                    if sizeClass == .regular {
+                                        AsyncImage(url: URL(string: "https://i.ytimg.com/vi/\(video.id)/mqdefault.jpg")) { image in
+                                            image.resizable().aspectRatio(contentMode: .fill)
+                                        } placeholder: {
+                                            Color.secondary.opacity(0.15)
+                                        }
+                                        .frame(width: 96, height: 54)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
                                     Text(video.title)
                                         .foregroundStyle(.primary)
                                         .lineLimit(2)
@@ -186,6 +203,7 @@ struct PlaylistInputView: View {
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return, modifiers: .command)
                     .disabled(selection.isEmpty)
                     .padding()
                     .background(.bar)
@@ -219,6 +237,6 @@ struct PlaylistInputView: View {
             .map { (id: $0.element.id, title: $0.element.title, number: Optional($0.offset + 1)) }
         model.enqueueVideos(videos, playlistTitle: result.title)
         selection.removeAll()
-        model.selectedTab = .library
+        if sizeClass == .compact { model.selectedTab = .library }
     }
 }

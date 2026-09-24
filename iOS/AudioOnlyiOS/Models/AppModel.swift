@@ -31,7 +31,13 @@ final class Job: ObservableObject, Identifiable {
     let embedArtwork: Bool
 
     @Published var title: String
-    @Published var status: Status = .pending
+    @Published var status: Status = .pending {
+        didSet {
+            if oldValue != status { onStatusChange?() }
+        }
+    }
+    /// 상태가 바뀌면 AppModel이 사이드바·배지 등을 다시 그리도록 알린다.
+    var onStatusChange: (() -> Void)?
     @Published var progress: Double?
     @Published var outputURL: URL?
 
@@ -168,6 +174,9 @@ final class AppModel: ObservableObject {
 
     private func enqueue(_ newJobs: [Job]) {
         guard !newJobs.isEmpty else { return }
+        for job in newJobs {
+            job.onStatusChange = { [weak self] in self?.objectWillChange.send() }
+        }
         jobs.insert(contentsOf: newJobs, at: 0)
         pump()
     }

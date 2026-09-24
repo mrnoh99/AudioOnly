@@ -26,6 +26,9 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        # iPad: 여러 창(Split View, Stage Manager)으로 열기
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

@@ -2,29 +2,32 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 사진 보관함에서 고른 영상을 앱 임시 폴더로 복사해 받는다.
-struct PickedMovie: Transferable {
+/// 사진 보관함 선택 · 드래그 앤 드롭으로 받은 영상/오디오를 앱 임시 폴더로 복사해 받는다.
+struct ImportedMedia: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(contentType: .movie) { movie in
-            SentTransferredFile(movie.url)
-        } importing: { received in
-            let folder = FileStore.importsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let destination = folder.appendingPathComponent(received.file.lastPathComponent)
-            try FileManager.default.copyItem(at: received.file, to: destination)
-            return PickedMovie(url: destination)
-        }
+        FileRepresentation(contentType: .movie, exporting: { SentTransferredFile($0.url) }, importing: copy)
+        FileRepresentation(contentType: .audio, exporting: { SentTransferredFile($0.url) }, importing: copy)
+    }
+
+    private static func copy(_ received: ReceivedTransferredFile) throws -> ImportedMedia {
+        let folder = FileStore.importsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent(received.file.lastPathComponent)
+        try FileManager.default.copyItem(at: received.file, to: destination)
+        return ImportedMedia(url: destination)
     }
 }
 
 /// 이미 내려받은 영상 파일(파일 앱, 사진 보관함, 다른 앱에서 공유)에서 오디오 추출
 struct LocalFilesView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showImporter = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isLoadingPhotos = false
+    @State private var isDropTargeted = false
 
     var body: some View {
         NavigationStack {
@@ -46,7 +49,7 @@ struct LocalFilesView: View {
                     }
                     .disabled(isLoadingPhotos)
                 } footer: {
-                    Text("다른 앱에서 영상 파일을 ‘공유 → AudioOnly’로 보내도 여기에 추가됩니다.")
+                    Text("파일 앱이나 다른 앱에서 영상을 이 화면으로 끌어다 놓거나, ‘공유 → AudioOnly’로 보내도 추가됩니다.")
                 }
 
                 if let error = model.importError {
@@ -67,6 +70,18 @@ struct LocalFilesView: View {
                     .onDelete { model.removePendingFiles(at: $0) }
                 }
             }
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8]))
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
+            .dropDestination(for: ImportedMedia.self) { items, _ in
+                for item in items { model.addImportedFile(item.url) }
+                return !items.isEmpty
+            } isTargeted: { isDropTargeted = $0 }
             .navigationTitle("다운로드한 파일")
             .toolbar {
                 if !model.pendingFiles.isEmpty {
@@ -77,13 +92,14 @@ struct LocalFilesView: View {
                 if !model.pendingFiles.isEmpty {
                     Button {
                         model.enqueueLocalFiles(model.pendingFiles)
-                        model.selectedTab = .library
+                        if sizeClass == .compact { model.selectedTab = .library }
                     } label: {
                         Label("\(model.pendingFiles.count)개 파일 오디오 추출 (\(model.format.displayName))", systemImage: "waveform")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return, modifiers: .command)
                     .padding()
                     .background(.bar)
                 }
@@ -113,7 +129,7 @@ struct LocalFilesView: View {
             var failed = 0
             for item in items {
                 do {
-                    if let movie = try await item.loadTransferable(type: PickedMovie.self) {
+                    if let movie = try await item.loadTransferable(type: ImportedMedia.self) {
                         model.addImportedFile(movie.url)
                     } else {
                         failed += 1

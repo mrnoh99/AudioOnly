@@ -2,7 +2,7 @@
 
 YouTube에서 **오디오만** 추출하는 macOS 앱입니다 (SwiftUI, macOS 13 이상).
 
-> 📱 **iPhone / iPad 버전**은 [`iOS/`](iOS/README.md) 폴더에 있습니다.
+> 📱 **iPad(및 iPhone) 버전**은 [`iOS/`](iOS/README.md) 폴더에 있습니다.
 
 | 탭 | 하는 일 |
 | --- | --- |
