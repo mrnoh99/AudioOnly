@@ -135,24 +135,26 @@ struct MiniPlayerBar: View {
 struct NowPlayingView: View {
     @EnvironmentObject private var player: AudioPlayer
     @Environment(\.dismiss) private var dismiss
+    /// iPhone 가로 화면처럼 세로 공간이 좁은 경우
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var scrubTime: TimeInterval?
     @State private var showQueue = false
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
-            let wide = proxy.size.width > proxy.size.height && proxy.size.width > 700
+            let wide = proxy.size.width > proxy.size.height
             ZStack {
                 background
                 VStack(spacing: 0) {
                     grabber
                     if wide {
-                        HStack(spacing: 48) {
-                            artwork(maxSide: min(proxy.size.height * 0.62, proxy.size.width * 0.42))
+                        HStack(spacing: isCompactHeight ? 28 : 48) {
+                            artwork(maxSide: min(proxy.size.height * (isCompactHeight ? 0.72 : 0.62), proxy.size.width * 0.42))
                             controls.frame(maxWidth: 460)
                         }
                         .frame(maxHeight: .infinity)
-                        .padding(.horizontal, 48)
+                        .padding(.horizontal, isCompactHeight ? 24 : 48)
                     } else {
                         Spacer(minLength: 12)
                         artwork(maxSide: min(proxy.size.width - 64, proxy.size.height * 0.42, 520))
@@ -232,12 +234,17 @@ struct NowPlayingView: View {
             .animation(.spring(response: 0.45, dampingFraction: 0.72), value: player.isPlaying)
     }
 
+    private var isCompactHeight: Bool { verticalSizeClass == .compact }
+
     private var controls: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: isCompactHeight ? 10 : 22) {
             titleRow
             scrubber
             transport
-            volume
+            // 세로 공간이 좁으면 볼륨은 기기 버튼으로 (음악 앱과 같음)
+            if !isCompactHeight {
+                volume
+            }
             bottomRow
         }
     }

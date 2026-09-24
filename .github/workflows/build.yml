@@ -41,15 +41,15 @@ jobs:
             build
 
   ios:
-    name: iPad / iOS app (Xcode project)
+    name: iPhone / iPad app (Xcode project)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build 'AudioOnly iPad' scheme (unsigned, device)
+      - name: Build 'AudioOnly iOS' scheme (unsigned, device)
         run: |
           xcodebuild \
             -project AudioOnly.xcodeproj \
-            -scheme 'AudioOnly iPad' \
+            -scheme 'AudioOnly iOS' \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/xcode-ios \

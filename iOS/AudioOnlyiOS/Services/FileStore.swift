@@ -1,4 +1,12 @@
 import Foundation
+import UIKit
+
+extension UIDevice {
+    /// '파일' 앱에서 이 기기의 로컬 저장소 이름 ("나의 iPhone" / "나의 iPad")
+    static var localStorageName: String {
+        current.userInterfaceIdiom == .pad ? "나의 iPad" : "나의 iPhone"
+    }
+}
 
 enum FileStore {
     static let audioExtensions: Set<String> = ["m4a", "wav", "mp3", "aac", "caf", "aiff", "flac"]

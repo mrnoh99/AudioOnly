@@ -35,7 +35,7 @@ struct SettingsView: View {
                 } header: {
                     Text("저장 위치")
                 } footer: {
-                    Text("‘파일’ 앱의 어느 폴더든 고를 수 있습니다: 나의 iPad, iCloud Drive, USB 드라이브, 다른 앱의 폴더 등. 보관함 탭에는 이 폴더의 오디오가 표시됩니다.")
+                    Text("‘파일’ 앱의 어느 폴더든 고를 수 있습니다: \(UIDevice.localStorageName), iCloud Drive, USB 드라이브, 다른 앱의 폴더 등. 보관함 탭에는 이 폴더의 오디오가 표시됩니다.")
                 }
 
                 Section {

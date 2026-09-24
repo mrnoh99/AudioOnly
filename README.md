@@ -2,7 +2,7 @@
 
 YouTube에서 **오디오만** 추출하는 macOS 앱입니다 (SwiftUI, macOS 26 이상).
 
-> 📱 **iPad(및 iPhone) 버전**은 [`iOS/`](iOS/README.md) 폴더에 있습니다.
+> 📱 **iPhone · iPad 버전**은 [`iOS/`](iOS/README.md) 폴더에 있습니다.
 
 | 탭 | 하는 일 |
 | --- | --- |
@@ -39,7 +39,7 @@ YouTube 쪽 변경으로 다운로드가 실패하면 먼저 yt-dlp를 업데이
 | 스킴 | 플랫폼 |
 | --- | --- |
 | **AudioOnly Mac** | macOS 앱 (yt-dlp · ffmpeg 사용) |
-| **AudioOnly iPad** | iPad / iPhone 앱 ([자세히](iOS/README.md)) |
+| **AudioOnly iOS** | iPhone / iPad 앱 ([자세히](iOS/README.md)) |
 
 스킴을 고르고 ▶︎ 실행하면 됩니다. 소스 폴더(`Sources/AudioOnly`, `iOS/AudioOnlyiOS`)는 폴더 동기화 그룹이라 새 파일을 추가하면 자동으로 프로젝트에 포함됩니다.
 

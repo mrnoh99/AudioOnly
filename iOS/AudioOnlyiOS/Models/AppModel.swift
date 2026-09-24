@@ -155,7 +155,7 @@ final class AppModel: ObservableObject {
     }
 
     var outputFolderDisplayName: String {
-        customOutputFolder?.lastPathComponent ?? "나의 iPad › AudioOnly (기본)"
+        customOutputFolder?.lastPathComponent ?? "\(UIDevice.localStorageName) › AudioOnly (기본)"
     }
 
     /// '파일' 앱 폴더 선택기에서 고른 폴더를 저장 위치로 쓴다.
