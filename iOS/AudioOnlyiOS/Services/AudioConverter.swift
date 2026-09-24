@@ -48,35 +48,27 @@ enum AudioConverter {
             throw ConversionError.exportUnavailable
         }
         try? FileManager.default.removeItem(at: output)
-        session.outputURL = output
-        session.outputFileType = .m4a
         if !metadata.isEmpty {
             session.metadata = metadata
         }
 
-        let poller = Task {
-            while !Task.isCancelled {
-                progress(Double(session.progress))
-                try? await Task.sleep(nanoseconds: 200_000_000)
+        let monitor = Task {
+            for await state in session.states(updateInterval: 0.2) {
+                if case .exporting(let exportProgress) = state {
+                    progress(exportProgress.fractionCompleted)
+                }
             }
         }
-        defer { poller.cancel() }
+        defer { monitor.cancel() }
 
-        await withTaskCancellationHandler {
-            await session.export()
-        } onCancel: {
-            session.cancelExport()
-        }
-
-        switch session.status {
-        case .completed:
+        do {
+            // iOS 18 API: Task가 취소되면 내보내기도 취소된다.
+            try await session.export(to: output, as: .m4a)
             progress(1)
-        case .cancelled:
+        } catch {
             try? FileManager.default.removeItem(at: output)
-            throw CancellationError()
-        default:
-            try? FileManager.default.removeItem(at: output)
-            throw session.error ?? ConversionError.failed("변환에 실패했습니다.")
+            if Task.isCancelled { throw CancellationError() }
+            throw error
         }
     }
 

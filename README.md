@@ -1,6 +1,6 @@
 # AudioOnly
 
-YouTube에서 **오디오만** 추출하는 macOS 앱입니다 (SwiftUI, macOS 13 이상).
+YouTube에서 **오디오만** 추출하는 macOS 앱입니다 (SwiftUI, macOS 26 이상).
 
 > 📱 **iPad(및 iPhone) 버전**은 [`iOS/`](iOS/README.md) 폴더에 있습니다.
 
@@ -33,7 +33,7 @@ YouTube 쪽 변경으로 다운로드가 실패하면 먼저 yt-dlp를 업데이
 
 ### Xcode 프로젝트 (권장)
 
-저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode 16 이상으로 엽니다. 타깃(스킴)이 두 개 있습니다.
+저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode 26 이상으로 엽니다. 타깃(스킴)이 두 개 있습니다.
 
 | 스킴 | 플랫폼 |
 | --- | --- |

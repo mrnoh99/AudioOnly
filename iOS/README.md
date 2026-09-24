@@ -1,6 +1,6 @@
 # AudioOnly for iPad (iOS)
 
-**iPad**(iPadOS 16 이상)를 주로 쓰도록 만든 YouTube 오디오 추출 앱입니다. iPhone에서도 동작합니다.
+**iPad**(iPadOS 18 이상)를 주로 쓰도록 만든 YouTube 오디오 추출 앱입니다. iPhone에서도 동작합니다.
 
 ## iPad에서 쓰기
 
@@ -41,7 +41,7 @@ iOS 앱은 yt-dlp · ffmpeg 같은 외부 프로그램을 실행할 수 없어�
 
 App Store 정책상 YouTube 다운로드 앱은 배포할 수 없으므로 **직접 빌드해서 설치**합니다.
 
-1. 저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode(16 이상)로 엽니다. (YouTubeKit 패키지는 자동으로 받아집니다.)
+1. 저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode(26 이상)로 엽니다. (YouTubeKit 패키지는 자동으로 받아집니다.)
 2. 위쪽 스킴에서 **AudioOnlyiOS** 를 고르고, 실행 대상에 연결한 iPad를 선택합니다.
 3. **AudioOnlyiOS 타깃 → Signing & Capabilities → Team** 에 본인 Apple ID 팀을 선택합니다.
    (번들 ID가 겹치면 `com.audioonly.ios` 를 다른 값으로 바꾸세요.)

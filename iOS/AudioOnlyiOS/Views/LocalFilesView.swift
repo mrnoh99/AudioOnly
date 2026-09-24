@@ -116,7 +116,7 @@ struct LocalFilesView: View {
                     model.importError = error.localizedDescription
                 }
             }
-            .onChange(of: photoItems) { items in
+            .onChange(of: photoItems) { _, items in
                 guard !items.isEmpty else { return }
                 loadPhotos(items)
             }
