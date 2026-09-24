@@ -74,12 +74,20 @@ extension AppTab: CaseIterable, Identifiable {
 /// iPad 전체 화면(regular)에서는 사이드바 + 작업 패널, 좁은 화면(Split View/Slide Over/iPhone)에서는 탭 막대
 struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @EnvironmentObject private var player: AudioPlayer
 
     var body: some View {
-        if sizeClass == .compact {
-            CompactRootView()
-        } else {
-            SplitRootView()
+        Group {
+            if sizeClass == .compact {
+                CompactRootView()
+            } else {
+                SplitRootView()
+            }
+        }
+        // 음악 앱처럼 미니 플레이어를 누르면 전체 화면 '지금 재생 중'
+        .fullScreenCover(isPresented: $player.showNowPlaying) {
+            NowPlayingView()
+                .environmentObject(player)
         }
     }
 }
@@ -160,6 +168,15 @@ struct ScreenView: View {
     let tab: AppTab
 
     var body: some View {
+        content
+            // 어느 화면에서든 아래쪽에 미니 플레이어
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                MiniPlayerBar()
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch tab {
         case .url: URLInputView()
         case .playlist: PlaylistInputView()

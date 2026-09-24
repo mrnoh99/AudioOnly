@@ -24,6 +24,11 @@
 	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<!-- 앱을 나가거나 화면을 꺼도 계속 재생 -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<!-- iPad: 여러 창(Split View, Stage Manager)으로 열기 -->

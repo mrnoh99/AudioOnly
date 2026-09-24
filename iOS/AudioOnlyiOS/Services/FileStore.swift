@@ -83,6 +83,10 @@ struct LibraryItem: Identifiable, Hashable {
 
     var id: URL { url }
     var name: String { url.deletingPathExtension().lastPathComponent }
+
+    // 같은 파일이면 같은 곡으로 본다(목록을 새로 읽어 수정 시각이 바뀌어도 재생 중 표시 유지).
+    static func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool { lhs.url == rhs.url }
+    func hash(into hasher: inout Hasher) { hasher.combine(url) }
     var sizeText: String { ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
 }
 
