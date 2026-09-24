@@ -7,7 +7,7 @@ enum AppTab: Hashable {
 
 enum JobSource {
     case youtube(videoID: String, directory: URL, fileNamePrefix: String, playlistTitle: String?)
-    case localFile(URL)
+    case localFile(URL, directory: URL)
 }
 
 @MainActor
@@ -54,7 +54,7 @@ final class Job: ObservableObject, Identifiable {
         switch source {
         case .youtube(let videoID, _, _, let playlist):
             return playlist.map { "재생목록: \($0)" } ?? "youtu.be/\(videoID)"
-        case .localFile(let url):
+        case .localFile(let url, _):
             return url.lastPathComponent
         }
     }
@@ -95,6 +95,7 @@ final class AppModel: ObservableObject {
         static let playlistSubfolder = "playlistSubfolder"
         static let playlistNumbering = "playlistNumbering"
         static let maxConcurrent = "maxConcurrent"
+        static let outputFolderBookmark = "outputFolderBookmark"
     }
 
     private let defaults = UserDefaults.standard
@@ -125,6 +126,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var library: [LibraryItem] = []
     @Published var importError: String?
 
+    /// 사용자가 '파일' 앱에서 고른 저장 폴더. nil이면 앱의 기본 폴더(나의 iPad > AudioOnly)
+    @Published private(set) var customOutputFolder: URL?
+    @Published var outputFolderError: String?
+
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     init() {
@@ -135,6 +140,7 @@ final class AppModel: ObservableObject {
         playlistNumbering = d.object(forKey: Keys.playlistNumbering) as? Bool ?? true
         let stored = d.integer(forKey: Keys.maxConcurrent)
         maxConcurrent = (1...4).contains(stored) ? stored : 2
+        restoreOutputFolder()
         refreshLibrary()
     }
 
@@ -142,10 +148,59 @@ final class AppModel: ObservableObject {
         jobs.filter { !$0.status.isFinished }.count
     }
 
+    // MARK: - 저장 위치
+
+    var outputDirectory: URL {
+        customOutputFolder ?? FileStore.documents
+    }
+
+    var outputFolderDisplayName: String {
+        customOutputFolder?.lastPathComponent ?? "나의 iPad › AudioOnly (기본)"
+    }
+
+    /// '파일' 앱 폴더 선택기에서 고른 폴더를 저장 위치로 쓴다.
+    /// 보안 범위 북마크로 저장해 두어 앱을 다시 켜도 그 폴더에 계속 쓸 수 있다.
+    func setOutputFolder(_ url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        do {
+            let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            defaults.set(bookmark, forKey: Keys.outputFolderBookmark)
+            customOutputFolder = url
+            outputFolderError = nil
+            refreshLibrary()
+        } catch {
+            if accessing { url.stopAccessingSecurityScopedResource() }
+            outputFolderError = "이 폴더는 저장 위치로 쓸 수 없습니다: \(error.localizedDescription)"
+        }
+    }
+
+    func resetOutputFolder() {
+        // 진행 중인 작업이 쓰고 있을 수 있으므로 이전 폴더 접근 권한은 앱이 끝날 때까지 유지한다.
+        defaults.removeObject(forKey: Keys.outputFolderBookmark)
+        customOutputFolder = nil
+        outputFolderError = nil
+        refreshLibrary()
+    }
+
+    private func restoreOutputFolder() {
+        guard let bookmark = defaults.data(forKey: Keys.outputFolderBookmark) else { return }
+        var isStale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &isStale) else {
+            defaults.removeObject(forKey: Keys.outputFolderBookmark)
+            outputFolderError = "이전에 고른 저장 폴더를 찾을 수 없어 기본 폴더로 되돌렸습니다."
+            return
+        }
+        _ = url.startAccessingSecurityScopedResource()
+        if isStale, let fresh = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+            defaults.set(fresh, forKey: Keys.outputFolderBookmark)
+        }
+        customOutputFolder = url
+    }
+
     // MARK: - 작업 추가
 
     func enqueueVideos(_ videos: [(id: String, title: String, number: Int?)], playlistTitle: String? = nil) {
-        var directory = FileStore.documents
+        var directory = outputDirectory
         if let playlistTitle, playlistSubfolder {
             directory.appendPathComponent(FileStore.sanitize(playlistTitle), isDirectory: true)
         }
@@ -165,8 +220,14 @@ final class AppModel: ObservableObject {
     }
 
     func enqueueLocalFiles(_ files: [URL]) {
+        let directory = outputDirectory
         let newJobs = files.map {
-            Job(source: .localFile($0), format: format, embedArtwork: false, title: $0.deletingPathExtension().lastPathComponent)
+            Job(
+                source: .localFile($0, directory: directory),
+                format: format,
+                embedArtwork: false,
+                title: $0.deletingPathExtension().lastPathComponent
+            )
         }
         pendingFiles.removeAll { files.contains($0) }
         enqueue(newJobs)
@@ -283,7 +344,7 @@ final class AppModel: ObservableObject {
     // MARK: - 보관함
 
     func refreshLibrary() {
-        library = FileStore.libraryItems()
+        library = FileStore.libraryItems(in: outputDirectory)
     }
 
     func delete(_ items: [LibraryItem]) {
@@ -292,7 +353,7 @@ final class AppModel: ObservableObject {
         }
         // 비어 있는 재생목록 폴더 정리
         for folder in Set(items.compactMap(\.folder)) {
-            let url = FileStore.documents.appendingPathComponent(folder, isDirectory: true)
+            let url = outputDirectory.appendingPathComponent(folder, isDirectory: true)
             if let contents = try? FileManager.default.contentsOfDirectory(atPath: url.path), contents.isEmpty {
                 try? FileManager.default.removeItem(at: url)
             }
@@ -319,9 +380,9 @@ enum JobRunner {
                     fileNamePrefix: prefix,
                     update: update
                 )
-            case .localFile(let input):
+            case .localFile(let input, let directory):
                 job.status = .converting
-                output = try await extractLocal(input: input, format: job.format, update: update)
+                output = try await extractLocal(input: input, directory: directory, format: job.format, update: update)
                 FileStore.removeTemporaryImport(input)
             }
             job.outputURL = output
@@ -339,13 +400,15 @@ enum JobRunner {
 
     private static func extractLocal(
         input: URL,
+        directory: URL,
         format: OutputFormat,
         update: @escaping @Sendable (JobUpdate) -> Void
     ) async throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let output = NameReservations.shared.reserveUniqueURL(
             baseName: FileStore.sanitize(input.deletingPathExtension().lastPathComponent),
             fileExtension: format.fileExtension,
-            in: FileStore.documents
+            in: directory
         )
         defer { NameReservations.shared.release(output) }
         switch format {

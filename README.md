@@ -12,6 +12,7 @@ YouTube에서 **오디오만** 추출하는 macOS 앱입니다 (SwiftUI, macOS 2
 
 - 출력 형식: MP3 / M4A(AAC) / Opus / FLAC / WAV, 비트레이트 128–320 kbps
 - 메타데이터, 썸네일(앨범 아트) 넣기
+- 저장 폴더 지정: 창 아래쪽 막대의 **변경…** 또는 **설정(⌘,) → 일반 → 저장 위치** (기본값 `~/Music/AudioOnly`)
 - 동시 작업 수 조절, 진행률 표시, 취소/다시 시도, 로그 보기, Finder에서 보기
 - 연령 제한 영상을 위한 브라우저 쿠키 사용(Safari/Chrome/Firefox/Edge/Brave)
 
@@ -37,8 +38,8 @@ YouTube 쪽 변경으로 다운로드가 실패하면 먼저 yt-dlp를 업데이
 
 | 스킴 | 플랫폼 |
 | --- | --- |
-| **AudioOnly** | macOS 앱 (yt-dlp · ffmpeg 사용) |
-| **AudioOnlyiOS** | iPad / iPhone 앱 ([자세히](iOS/README.md)) |
+| **AudioOnly Mac** | macOS 앱 (yt-dlp · ffmpeg 사용) |
+| **AudioOnly iPad** | iPad / iPhone 앱 ([자세히](iOS/README.md)) |
 
 스킴을 고르고 ▶︎ 실행하면 됩니다. 소스 폴더(`Sources/AudioOnly`, `iOS/AudioOnlyiOS`)는 폴더 동기화 그룹이라 새 파일을 추가하면 자동으로 프로젝트에 포함됩니다.
 

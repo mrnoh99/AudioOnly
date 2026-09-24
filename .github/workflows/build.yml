@@ -29,11 +29,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build AudioOnly scheme
+      - name: Build 'AudioOnly Mac' scheme
         run: |
           xcodebuild \
             -project AudioOnly.xcodeproj \
-            -scheme AudioOnly \
+            -scheme 'AudioOnly Mac' \
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -derivedDataPath build/xcode-mac \
@@ -45,11 +45,11 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build AudioOnlyiOS scheme (unsigned, device)
+      - name: Build 'AudioOnly iPad' scheme (unsigned, device)
         run: |
           xcodebuild \
             -project AudioOnly.xcodeproj \
-            -scheme AudioOnlyiOS \
+            -scheme 'AudioOnly iPad' \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/xcode-ios \

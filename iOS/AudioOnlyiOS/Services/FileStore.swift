@@ -48,10 +48,10 @@ enum FileStore {
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    /// Documents 아래(하위 폴더 포함)의 오디오 파일 목록, 최신순
-    static func libraryItems() -> [LibraryItem] {
+    /// 저장 폴더 아래(하위 폴더 포함)의 오디오 파일 목록, 최신순
+    static func libraryItems(in directory: URL) -> [LibraryItem] {
         let fm = FileManager.default
-        let root = documents.standardizedFileURL
+        let root = directory.standardizedFileURL
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
         guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else {
             return []

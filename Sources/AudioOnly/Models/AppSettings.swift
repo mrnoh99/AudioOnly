@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum AudioFormat: String, CaseIterable, Identifiable {
@@ -136,6 +137,30 @@ final class AppSettings: ObservableObject {
         cookieBrowser = CookieBrowser(rawValue: d.string(forKey: Keys.cookieBrowser) ?? "") ?? .none
         customYtDlpPath = d.string(forKey: Keys.customYtDlpPath) ?? ""
         customFfmpegPath = d.string(forKey: Keys.customFfmpegPath) ?? ""
+    }
+
+    var isDefaultOutputDirectory: Bool {
+        outputDirectory.standardizedFileURL == Self.defaultOutputDirectory.standardizedFileURL
+    }
+
+    /// 저장 폴더를 고르는 패널을 띄운다.
+    func chooseOutputDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = outputDirectory
+        panel.prompt = "선택"
+        panel.message = "추출한 오디오를 저장할 폴더를 고르세요."
+        if panel.runModal() == .OK, let url = panel.url {
+            outputDirectory = url
+        }
+    }
+
+    func revealOutputDirectory() {
+        try? FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(outputDirectory)
     }
 
     func makeOptions(tools: ToolManager) -> ExtractOptions {

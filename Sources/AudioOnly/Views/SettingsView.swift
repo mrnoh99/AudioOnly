@@ -18,6 +18,23 @@ struct SettingsView: View {
 
     private var generalTab: some View {
         Form {
+            Section("저장 위치") {
+                LabeledContent("폴더") {
+                    Text(settings.outputDirectory.path)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(settings.outputDirectory.path)
+                }
+                HStack {
+                    Button("변경…") { settings.chooseOutputDirectory() }
+                    Button("Finder에서 열기") { settings.revealOutputDirectory() }
+                    Spacer()
+                    Button("기본값으로") { settings.outputDirectory = AppSettings.defaultOutputDirectory }
+                        .disabled(settings.isDefaultOutputDirectory)
+                }
+                Toggle("다운로드한 파일 탭: 원본 파일과 같은 폴더에 저장", isOn: $settings.saveNextToSource)
+            }
+
             Toggle("메타데이터(제목, 아티스트 등) 포함", isOn: $settings.embedMetadata)
             Toggle("썸네일을 앨범 아트로 넣기 (MP3, M4A, FLAC)", isOn: $settings.embedThumbnail)
             Stepper("동시 작업 수: \(settings.maxConcurrent)", value: $settings.maxConcurrent, in: 1...6)

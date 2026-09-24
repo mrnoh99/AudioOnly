@@ -115,28 +115,13 @@ struct OutputOptionsBar: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button("변경…", action: chooseFolder)
+            Button("변경…") { settings.chooseOutputDirectory() }
             Button {
-                let dir = settings.outputDirectory
-                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                NSWorkspace.shared.open(dir)
+                settings.revealOutputDirectory()
             } label: {
                 Image(systemName: "arrow.up.forward.app")
             }
             .help("Finder에서 열기")
-        }
-    }
-
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = settings.outputDirectory
-        panel.prompt = "선택"
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.outputDirectory = url
         }
     }
 }

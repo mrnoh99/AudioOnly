@@ -24,7 +24,8 @@
 | **보관함** | 진행 상황, 추출한 파일 재생 · 공유 · 삭제 |
 | **설정** | 출력 형식(M4A / WAV), 앨범 아트, 재생목록 폴더/번호, 동시 작업 수 |
 
-추출한 파일은 **파일 앱 → 나의 iPhone → AudioOnly** 에 저장됩니다.
+추출한 파일은 기본적으로 **파일 앱 → 나의 iPad → AudioOnly** 에 저장됩니다.
+**설정 → 저장 위치 → 폴더 선택…** 에서 파일 앱의 다른 폴더(iCloud Drive, USB 드라이브 등)로 바꿀 수 있습니다.
 
 ## macOS 버전과 다른 점
 
@@ -42,7 +43,8 @@ iOS 앱은 yt-dlp · ffmpeg 같은 외부 프로그램을 실행할 수 없어�
 App Store 정책상 YouTube 다운로드 앱은 배포할 수 없으므로 **직접 빌드해서 설치**합니다.
 
 1. 저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode(26 이상)로 엽니다. (YouTubeKit 패키지는 자동으로 받아집니다.)
-2. 위쪽 스킴에서 **AudioOnlyiOS** 를 고르고, 실행 대상에 연결한 iPad를 선택합니다.
+2. 위쪽 스킴에서 **AudioOnly iPad** 를 고르고, 실행 대상에 연결한 iPad를 선택합니다.
+   (**AudioOnly Mac** 스킴을 고른 채 iPad에 실행하면 *mismatched platform* 오류가 납니다.)
 3. **AudioOnlyiOS 타깃 → Signing & Capabilities → Team** 에 본인 Apple ID 팀을 선택합니다.
    (번들 ID가 겹치면 `com.audioonly.ios` 를 다른 값으로 바꾸세요.)
 4. ▶︎ 실행. 처음에는 iPad의 **설정 → 일반 → VPN 및 기기 관리**에서 개발자를 신뢰해야 합니다.
@@ -68,3 +70,12 @@ iOS/
     ├── Services/AudioPlayer.swift      보관함 미리듣기
     └── Views/                          SwiftUI 화면
 ```
+
+## 문제 해결
+
+**“mismatched platform” / iPad를 실행 대상으로 고를 수 없음**
+
+1. 스킴이 **AudioOnly iPad** 인지 확인하세요. **AudioOnly Mac** 은 macOS 앱이라 iPad에서 실행할 수 없습니다.
+2. iPad의 iPadOS 버전을 지원하는 Xcode가 필요합니다. 예를 들어 **iPadOS 27 기기에는 Xcode 27 이상**이 필요합니다.
+   Xcode → Settings → Components 에서 해당 iOS 플랫폼이 설치되어 있는지도 확인하세요.
+3. 그래도 안 되면 **Product → Clean Build Folder**(⇧⌘K) 후 다시 실행하세요.
