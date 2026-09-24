@@ -37,23 +37,15 @@ iOS 앱은 yt-dlp · ffmpeg 같은 외부 프로그램을 실행할 수 없어�
   iOS에는 MP3 인코더가 없어 MP3는 지원하지 않습니다.
 - 다운로드는 앱이 화면에 떠 있을 때 진행됩니다. 작업 중에는 화면이 자동으로 꺼지지 않습니다.
 
-## 빌드해서 iPhone에 설치하기
+## 빌드해서 iPad에 설치하기
 
 App Store 정책상 YouTube 다운로드 앱은 배포할 수 없으므로 **직접 빌드해서 설치**합니다.
 
-1. Mac에 Xcode와 [XcodeGen](https://github.com/yonaskolb/XcodeGen)을 설치합니다.
-   ```bash
-   brew install xcodegen
-   ```
-2. Xcode 프로젝트를 만들고 엽니다.
-   ```bash
-   cd iOS
-   xcodegen generate
-   open AudioOnlyiOS.xcodeproj
-   ```
-3. Xcode에서 **AudioOnlyiOS 타깃 → Signing & Capabilities → Team** 에 본인 Apple ID 팀을 선택합니다.
+1. 저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode(16 이상)로 엽니다. (YouTubeKit 패키지는 자동으로 받아집니다.)
+2. 위쪽 스킴에서 **AudioOnlyiOS** 를 고르고, 실행 대상에 연결한 iPad를 선택합니다.
+3. **AudioOnlyiOS 타깃 → Signing & Capabilities → Team** 에 본인 Apple ID 팀을 선택합니다.
    (번들 ID가 겹치면 `com.audioonly.ios` 를 다른 값으로 바꾸세요.)
-4. iPhone을 연결하고 ▶︎ 실행. 처음에는 iPhone의 **설정 → 일반 → VPN 및 기기 관리**에서 개발자를 신뢰해야 합니다.
+4. ▶︎ 실행. 처음에는 iPad의 **설정 → 일반 → VPN 및 기기 관리**에서 개발자를 신뢰해야 합니다.
 
 무료 Apple ID로 설치한 앱은 7일마다 다시 설치해야 합니다(유료 개발자 계정은 1년).
 
@@ -63,9 +55,10 @@ AltStore나 Sideloadly 같은 사이드로딩 도구로 본인 Apple ID 서명�
 ## 구조
 
 ```
+AudioOnly.xcodeproj                     (루트) macOS · iOS 타깃이 함께 있는 Xcode 프로젝트
 iOS/
-├── project.yml                         XcodeGen 설정 (YouTubeKit 의존성, Info.plist)
 └── AudioOnlyiOS
+    ├── Info.plist                      파일 공유, 여러 창, ‘공유 → AudioOnly’ 설정
     ├── App/AudioOnlyiOSApp.swift       진입점, 탭 구성
     ├── Models/AppModel.swift           설정, 작업 큐, 보관함
     ├── Services/YouTubeAudioDownloader.swift  스트림 선택 + 분할 다운로드 + 태그

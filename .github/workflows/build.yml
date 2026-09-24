@@ -24,33 +24,43 @@ jobs:
             build/AudioOnly.zip
             build/AudioOnly.dmg
 
-  ios:
-    name: iOS app
+  macos-xcode:
+    name: macOS app (Xcode project)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Generate Xcode project
-        run: cd iOS && xcodegen generate
-      - name: Build (unsigned, device)
+      - name: Build AudioOnly scheme
         run: |
-          cd iOS
           xcodebuild \
-            -project AudioOnlyiOS.xcodeproj \
+            -project AudioOnly.xcodeproj \
+            -scheme AudioOnly \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/xcode-mac \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+  ios:
+    name: iPad / iOS app (Xcode project)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build AudioOnlyiOS scheme (unsigned, device)
+        run: |
+          xcodebuild \
+            -project AudioOnly.xcodeproj \
             -scheme AudioOnlyiOS \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build \
+            -derivedDataPath build/xcode-ios \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build
       - name: Package unsigned IPA
         run: |
-          cd iOS
-          mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/AudioOnly.app Payload/
-          zip -qry AudioOnly-unsigned.ipa Payload
+          mkdir -p build/Payload
+          cp -R build/xcode-ios/Build/Products/Release-iphoneos/AudioOnlyiOS.app build/Payload/
+          cd build && zip -qry AudioOnly-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
           name: AudioOnly-iOS-unsigned
-          path: iOS/AudioOnly-unsigned.ipa
+          path: build/AudioOnly-unsigned.ipa

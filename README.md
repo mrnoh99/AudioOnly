@@ -31,6 +31,19 @@ YouTube 쪽 변경으로 다운로드가 실패하면 먼저 yt-dlp를 업데이
 
 ## 빌드 & 실행
 
+### Xcode 프로젝트 (권장)
+
+저장소 루트의 **`AudioOnly.xcodeproj`** 를 Xcode 16 이상으로 엽니다. 타깃(스킴)이 두 개 있습니다.
+
+| 스킴 | 플랫폼 |
+| --- | --- |
+| **AudioOnly** | macOS 앱 (yt-dlp · ffmpeg 사용) |
+| **AudioOnlyiOS** | iPad / iPhone 앱 ([자세히](iOS/README.md)) |
+
+스킴을 고르고 ▶︎ 실행하면 됩니다. 소스 폴더(`Sources/AudioOnly`, `iOS/AudioOnlyiOS`)는 폴더 동기화 그룹이라 새 파일을 추가하면 자동으로 프로젝트에 포함됩니다.
+
+### 명령줄 (macOS 앱)
+
 Xcode(또는 Command Line Tools)가 설치된 Mac에서:
 
 ```bash
@@ -43,8 +56,6 @@ swift run
 # 유니버설(Apple Silicon + Intel) + DMG
 UNIVERSAL=1 DMG=1 ./scripts/build-app.sh
 ```
-
-`Package.swift`를 Xcode로 열어서 빌드/실행해도 됩니다.
 
 GitHub Actions(`.github/workflows/build.yml`)가 푸시할 때마다 유니버설 `AudioOnly.zip` / `AudioOnly.dmg`와 iOS용 서명 안 된 `.ipa`를 빌드해서 아티팩트로 올립니다.
 ad-hoc 서명만 된 앱이라 처음 열 때 Gatekeeper가 막으면 Finder에서 **우클릭 → 열기**를 누르거나 다음을 실행하세요.
