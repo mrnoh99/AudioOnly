@@ -562,6 +562,72 @@ final class AppModel: ObservableObject {
 
     // MARK: - 보관함
 
+    enum RenameError: LocalizedError {
+        case empty
+        case exists(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .empty: return "이름을 입력해 주세요."
+            case .exists(let name): return "‘\(name)’ 이름의 파일이 이미 있습니다."
+            }
+        }
+    }
+
+    /// 파일 이름을 바꾼다(확장자는 유지). iCloud Drive 폴더에서도 안전하도록 파일 조정자로 옮긴다.
+    func rename(_ item: LibraryItem, to rawName: String) throws -> LibraryItem {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw RenameError.empty }
+        let name = FileStore.sanitize(trimmed)
+        let source = item.url
+        let destination = source.deletingLastPathComponent()
+            .appendingPathComponent(name)
+            .appendingPathExtension(source.pathExtension)
+            .standardizedFileURL
+        guard destination.path != source.path else { return item }
+
+        let fm = FileManager.default
+        // 대소문자만 바꾸는 경우(예: abc → ABC)는 같은 파일로 보이므로 '이미 있음'이 아니다.
+        let caseOnly = destination.path.lowercased() == source.path.lowercased()
+        if !caseOnly && (fm.fileExists(atPath: destination.path)
+            || fm.fileExists(atPath: CloudFiles.placeholderURL(for: destination).path)) {
+            throw RenameError.exists(name)
+        }
+
+        var coordinatorError: NSError?
+        var moveError: Error?
+        NSFileCoordinator().coordinate(
+            writingItemAt: source, options: .forMoving,
+            writingItemAt: destination, options: .forReplacing,
+            error: &coordinatorError
+        ) { from, to in
+            do {
+                if caseOnly {
+                    // 대소문자만 다르면 임시 이름을 거쳐서 바꾼다.
+                    let temp = from.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+                        .appendingPathExtension(from.pathExtension)
+                    try fm.moveItem(at: from, to: temp)
+                    try fm.moveItem(at: temp, to: to)
+                } else {
+                    try fm.moveItem(at: from, to: to)
+                }
+            } catch {
+                moveError = error
+            }
+        }
+        if let error = coordinatorError ?? moveError { throw error }
+
+        TrackInfoCache.shared.invalidate([source])
+        refreshLibrary()
+        return LibraryItem(
+            url: destination,
+            folder: item.folder,
+            modified: item.modified,
+            size: item.size,
+            isCloudOnly: item.isCloudOnly
+        )
+    }
+
     /// iCloud에만 있는 파일들을 Wi-Fi에서 받아 온다.
     func downloadFromCloud(_ items: [LibraryItem]) {
         cloud.request(items.filter(\.isCloudOnly).map(\.url))

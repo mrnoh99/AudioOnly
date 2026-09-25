@@ -275,12 +275,17 @@ struct PlayShuffleButtons: View {
 }
 
 struct LibraryRowView: View {
+    @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var player: AudioPlayer
     @Environment(\.horizontalSizeClass) private var sizeClass
     let item: LibraryItem
     /// 이 곡을 눌렀을 때 대기열이 될 목록
     let playlist: [LibraryItem]
     var onDelete: ([LibraryItem]) -> Void = { _ in }
+
+    @State private var isRenaming = false
+    @State private var newName = ""
+    @State private var renameError: String?
 
     private var isCurrent: Bool { player.current == item }
 
@@ -351,11 +356,34 @@ struct LibraryRowView: View {
             ShareLink(item: item.url) {
                 Label("공유", systemImage: "square.and.arrow.up")
             }
+            Button {
+                newName = item.name
+                isRenaming = true
+            } label: {
+                Label("이름 변경", systemImage: "pencil")
+            }
             Button(role: .destructive) {
                 onDelete([item])
             } label: {
                 Label("삭제", systemImage: "trash")
             }
+        }
+        .alert("이름 변경", isPresented: $isRenaming) {
+            TextField("파일 이름", text: $newName)
+                .autocorrectionDisabled()
+            Button("취소", role: .cancel) {}
+            Button("저장") { rename() }
+                .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            Text("확장자(.\(item.url.pathExtension))는 그대로 유지됩니다.")
+        }
+        .alert(
+            "이름을 바꿀 수 없습니다",
+            isPresented: Binding(get: { renameError != nil }, set: { if !$0 { renameError = nil } })
+        ) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(renameError ?? "")
         }
         .swipeActions(edge: .leading) {
             Button {
@@ -371,6 +399,17 @@ struct LibraryRowView: View {
             } label: {
                 Label("삭제", systemImage: "trash")
             }
+        }
+    }
+}
+
+extension LibraryRowView {
+    fileprivate func rename() {
+        do {
+            let renamed = try model.rename(item, to: newName)
+            player.itemRenamed(from: item, to: renamed)
+        } catch {
+            renameError = error.localizedDescription
         }
     }
 }

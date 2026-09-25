@@ -109,7 +109,8 @@ final class AudioPlayer: ObservableObject {
         return Array(queue[(index + 1)...])
     }
 
-    var title: String { info.title ?? current?.name ?? "" }
+    /// 화면에 보이는 제목은 파일 이름(사용자가 바꾼 이름이 그대로 보이도록)
+    var title: String { current?.name ?? info.title ?? "" }
     var subtitle: String { info.artist ?? current?.folder ?? "AudioOnly" }
 
     // MARK: - 재생 시작
@@ -276,6 +277,14 @@ final class AudioPlayer: ObservableObject {
         for item in removed {
             if let i = originalQueue.firstIndex(of: item) { originalQueue.remove(at: i) }
         }
+    }
+
+    /// 보관함에서 파일 이름을 바꿨을 때 대기열의 항목도 새 경로로 바꾼다.
+    /// 재생 중인 곡은 이미 열린 파일로 계속 재생된다.
+    func itemRenamed(from old: LibraryItem, to new: LibraryItem) {
+        queue = queue.map { $0 == old ? new : $0 }
+        originalQueue = originalQueue.map { $0 == old ? new : $0 }
+        if current == new { updateNowPlaying() }
     }
 
     /// 보관함에서 파일을 지웠을 때 대기열에서도 뺀다.
