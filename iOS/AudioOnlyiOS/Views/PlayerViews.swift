@@ -72,10 +72,15 @@ struct MiniPlayerBar: View {
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                     HStack(spacing: 4) {
-                        if player.isSleepTimerActive {
-                            Image(systemName: "moon.zzz.fill")
+                        if player.isWaitingForCloud {
+                            Image(systemName: "icloud.and.arrow.down")
+                            Text("iCloud에서 받은 뒤 재생합니다").lineLimit(1)
+                        } else {
+                            if player.isSleepTimerActive {
+                                Image(systemName: "moon.zzz.fill")
+                            }
+                            Text(player.subtitle).lineLimit(1)
                         }
-                        Text(player.subtitle).lineLimit(1)
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -165,8 +170,10 @@ struct NowPlayingView: View {
                         .padding(.horizontal, 28)
                     Spacer(minLength: 12)
                 }
+                CreditFooter()
+                    .foregroundStyle(.white.opacity(0.6))
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, 4)
             // 내용은 항상 화면 폭에 맞춘다(배경 이미지 크기와 무관).
             .frame(width: proxy.size.width, height: proxy.size.height)
             .background { background }
@@ -246,6 +253,13 @@ struct NowPlayingView: View {
     private var controls: some View {
         VStack(spacing: isCompactHeight ? 10 : 22) {
             titleRow
+            if player.isWaitingForCloud, let url = player.current?.url {
+                CloudStatusLine(url: url)
+                    .tint(.blue)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 10))
+            }
             scrubber
             transport
             // 세로 공간이 좁으면 볼륨은 기기 버튼으로 (음악 앱과 같음)
@@ -505,6 +519,7 @@ struct QueueView: View {
                     .buttonStyle(.borderless)
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { CreditFooter().background(.bar) }
             .navigationTitle("재생 대기열")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

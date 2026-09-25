@@ -91,3 +91,86 @@ struct DownloadSummaryView: View {
         model.jobs.contains { !$0.status.isFinished }
     }
 }
+
+/// iCloud 파일 한 곡의 받기 상태: 대기 / 받는 중(진행률) / 실패 / 아직 요청 안 함
+struct CloudStatusLine: View {
+    @ObservedObject private var cloud = CloudDownloadManager.shared
+    let url: URL
+
+    var body: some View {
+        switch cloud.state(for: url) {
+        case .downloading(let progress)?:
+            VStack(alignment: .leading, spacing: 3) {
+                if let progress {
+                    ProgressView(value: progress)
+                } else {
+                    ProgressView().progressViewStyle(.linear)
+                }
+                Label(
+                    progress.map { String(format: "iCloud에서 받는 중 %.0f%%", $0 * 100) } ?? "iCloud에서 받는 중…",
+                    systemImage: "icloud.and.arrow.down"
+                )
+                .font(.caption)
+                .foregroundStyle(.blue)
+            }
+        case .waitingForWiFi?:
+            Label("Wi-Fi 대기 · Wi-Fi에 연결되면 iCloud에서 받습니다", systemImage: "wifi.slash")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        case .failed(let message)?:
+            Label("iCloud에서 받지 못했습니다: \(message)", systemImage: "exclamationmark.icloud")
+                .font(.caption)
+                .foregroundStyle(.red)
+        case nil:
+            Label("iCloud에만 있음 · 재생하면 Wi-Fi에서 받습니다", systemImage: "icloud")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// 보관함 위쪽: iCloud에만 있는 파일 수, 전체 받기 버튼과 진행 상황
+struct CloudLibraryBanner: View {
+    @EnvironmentObject private var model: AppModel
+    @ObservedObject private var cloud = CloudDownloadManager.shared
+    @ObservedObject private var network = NetworkMonitor.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("iCloud에만 있는 파일 \(model.cloudOnlyCount)개")
+                        .font(.subheadline.weight(.semibold))
+                    Text("저장 폴더가 iCloud Drive라서 일부 파일은 기기에 내용이 없습니다. 재생하려면 먼저 받아야 하며, **Wi-Fi에서만** 받습니다.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            if cloud.downloadingCount > 0 {
+                if let progress = cloud.averageProgress {
+                    ProgressView(value: progress)
+                }
+                Text(String(format: "받는 중 %d개 · %.0f%%", cloud.downloadingCount, (cloud.averageProgress ?? 0) * 100))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.blue)
+            }
+            if cloud.waitingCount > 0 {
+                Label("Wi-Fi 대기 \(cloud.waitingCount)개 — Wi-Fi에 연결되면 자동으로 받습니다", systemImage: "wifi.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            Button {
+                model.downloadFromCloud(model.library)
+            } label: {
+                Label(network.state.allowsDownload ? "모두 받기" : "Wi-Fi 연결 시 모두 받기", systemImage: "icloud.and.arrow.down")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 4)
+    }
+}

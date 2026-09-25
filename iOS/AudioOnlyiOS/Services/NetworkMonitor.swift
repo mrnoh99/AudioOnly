@@ -20,6 +20,8 @@ enum NetworkState: Equatable {
 /// 현재 네트워크가 Wi-Fi인지 감시한다.
 @MainActor
 final class NetworkMonitor: ObservableObject {
+    static let shared = NetworkMonitor()
+
     @Published private(set) var state: NetworkState = .unknown
     var onChange: ((_ old: NetworkState, _ new: NetworkState) -> Void)?
 

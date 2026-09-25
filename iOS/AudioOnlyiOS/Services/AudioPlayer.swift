@@ -57,6 +57,12 @@ final class AudioPlayer: ObservableObject {
     @Published private(set) var rate: Float = 1.0
     @Published var showNowPlaying = false
 
+    /// 현재 곡이 iCloud에만 있어 받는 중(또는 Wi-Fi 대기)
+    @Published private(set) var isWaitingForCloud = false
+    /// 받기가 끝나면 바로 재생할지
+    private var playWhenDownloaded = false
+    private var cloudObserver: NSObjectProtocol?
+
     @Published private(set) var sleepTimerEnd: Date?
     @Published private(set) var sleepAtEndOfTrack = false
     @Published private(set) var isFadingOut = false
@@ -79,6 +85,16 @@ final class AudioPlayer: ObservableObject {
         }
         observeAudioSession()
         configureRemoteCommands()
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: .cloudFileDownloaded, object: nil, queue: .main
+        ) { [weak self] note in
+            let url = note.object as? URL
+            MainActor.assumeIsolated {
+                guard let self, self.isWaitingForCloud, let url, url == self.current?.url.standardizedFileURL else { return }
+                self.isWaitingForCloud = false
+                self.loadCurrent(autoplay: self.playWhenDownloaded)
+            }
+        }
     }
 
     // MARK: - 상태
@@ -156,7 +172,13 @@ final class AudioPlayer: ObservableObject {
     }
 
     func resume() {
-        guard current != nil else { return }
+        guard let item = current else { return }
+        if isWaitingForCloud {
+            // 아직 iCloud에서 받는 중: 다 받으면 재생
+            playWhenDownloaded = true
+            CloudDownloadManager.shared.request([item.url])
+            return
+        }
         activateSession()
         if player.currentItem == nil { loadCurrent(autoplay: false) }
         player.volume = 1
@@ -166,6 +188,7 @@ final class AudioPlayer: ObservableObject {
     }
 
     func pause() {
+        playWhenDownloaded = false
         player.pause()
         isPlaying = false
         updateNowPlaying()
@@ -270,6 +293,8 @@ final class AudioPlayer: ObservableObject {
 
     func stop() {
         cancelSleepTimer()
+        isWaitingForCloud = false
+        playWhenDownloaded = false
         player.pause()
         player.replaceCurrentItem(with: nil)
         queue = []
@@ -351,6 +376,23 @@ final class AudioPlayer: ObservableObject {
             stop()
             return
         }
+
+        // iCloud에만 있는 곡: Wi-Fi에서 받은 뒤 재생한다(받는 동안 진행 상황 표시).
+        if CloudFiles.needsDownload(item.url) {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            isPlaying = false
+            isWaitingForCloud = true
+            playWhenDownloaded = autoplay
+            currentTime = 0
+            duration = 0
+            info = TrackInfo(title: item.name, artist: item.folder, artwork: nil, duration: 0)
+            CloudDownloadManager.shared.request([item.url])
+            updateNowPlaying()
+            return
+        }
+        isWaitingForCloud = false
+
         let playerItem = AVPlayerItem(url: item.url)
         playerItem.audioTimePitchAlgorithm = .timeDomain // 배속에서도 음정 유지
 

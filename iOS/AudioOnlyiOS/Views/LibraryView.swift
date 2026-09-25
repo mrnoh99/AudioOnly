@@ -80,6 +80,9 @@ struct LibraryView: View {
                             .foregroundStyle(.secondary)
                     }
                 } else if mode == .songs {
+                    if model.cloudOnlyCount > 0 {
+                        Section { CloudLibraryBanner() }
+                    }
                     Section {
                         PlayShuffleButtons(items: filteredLibrary)
                             .listRowBackground(Color.clear)
@@ -228,6 +231,12 @@ struct LibraryRowView: View {
             HStack(spacing: 12) {
                 ZStack {
                     FileArtworkView(url: item.url, size: 48)
+                        .opacity(item.isCloudOnly ? 0.5 : 1)
+                    if item.isCloudOnly && !isCurrent {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .foregroundStyle(.white)
+                            .shadow(radius: 2)
+                    }
                     if isCurrent {
                         RoundedRectangle(cornerRadius: 6).fill(.black.opacity(0.35))
                             .frame(width: 48, height: 48)
@@ -252,6 +261,9 @@ struct LibraryRowView: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    if item.isCloudOnly {
+                        CloudStatusLine(url: item.url)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -259,6 +271,13 @@ struct LibraryRowView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            if item.isCloudOnly {
+                Button {
+                    CloudDownloadManager.shared.request([item.url])
+                } label: {
+                    Label("iCloud에서 받기 (Wi-Fi)", systemImage: "icloud.and.arrow.down")
+                }
+            }
             Button {
                 player.playNext(item)
             } label: {

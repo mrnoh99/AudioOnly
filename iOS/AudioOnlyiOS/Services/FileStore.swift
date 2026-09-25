@@ -85,23 +85,44 @@ enum FileStore {
     static func libraryItems(in directory: URL) -> [LibraryItem] {
         let fm = FileManager.default
         let root = directory.standardizedFileURL
-        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
-        guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else {
+        let keys: [URLResourceKey] = [
+            .contentModificationDateKey, .fileSizeKey, .isRegularFileKey, .isDirectoryKey,
+            .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey,
+        ]
+        // iCloud에서 받지 않은 파일(".이름.icloud")도 찾기 위해 숨김 파일을 건너뛰지 않는다.
+        guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: keys) else {
             return []
         }
         var items: [LibraryItem] = []
-        for case let url as URL in enumerator {
+        var seen = Set<URL>()
+        for case let found as URL in enumerator {
+            let values = try? found.resourceValues(forKeys: Set(keys))
+            var url = found
+            var isCloudOnly = false
+            if found.lastPathComponent.hasPrefix(".") {
+                guard let real = CloudFiles.realURL(forPlaceholder: found) else {
+                    if values?.isDirectory == true { enumerator.skipDescendants() }
+                    continue
+                }
+                url = real
+                isCloudOnly = true
+            } else if values?.isUbiquitousItem == true {
+                isCloudOnly = values?.ubiquitousItemDownloadingStatus == .notDownloaded
+            }
             guard audioExtensions.contains(url.pathExtension.lowercased()) else { continue }
-            let values = try? url.resourceValues(forKeys: Set(keys))
-            guard values?.isRegularFile == true else { continue }
+            guard isCloudOnly || values?.isRegularFile == true else { continue }
+            let key = url.standardizedFileURL
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
             let folderPath = url.deletingLastPathComponent().standardizedFileURL.path
             let rootPath = root.path
             let folder = folderPath == rootPath ? nil : String(folderPath.dropFirst(rootPath.count + 1))
             items.append(LibraryItem(
-                url: url,
+                url: key,
                 folder: folder,
                 modified: values?.contentModificationDate ?? .distantPast,
-                size: Int64(values?.fileSize ?? 0)
+                size: Int64(values?.fileSize ?? 0),
+                isCloudOnly: isCloudOnly
             ))
         }
         return items.sorted { $0.modified > $1.modified }
@@ -113,6 +134,8 @@ struct LibraryItem: Identifiable, Hashable {
     let folder: String?
     let modified: Date
     let size: Int64
+    /// iCloud에만 있고 기기에는 아직 받지 않은 파일
+    var isCloudOnly = false
 
     var id: URL { url }
     var name: String { url.deletingPathExtension().lastPathComponent }

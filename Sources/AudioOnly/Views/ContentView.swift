@@ -36,6 +36,8 @@ struct ContentView: View {
                 JobListView()
                     .frame(minHeight: 180)
             }
+            Divider()
+            CreditFooter()
         }
         .onAppear { queue.maxConcurrent = settings.maxConcurrent }
         .onReceive(settings.$maxConcurrent) { queue.maxConcurrent = $0 }

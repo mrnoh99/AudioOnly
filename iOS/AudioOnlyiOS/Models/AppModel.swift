@@ -160,10 +160,12 @@ final class AppModel: ObservableObject {
     @Published var outputFolderError: String?
 
     /// Wi-Fi 감시. YouTube 다운로드는 Wi-Fi에서만 진행한다.
-    let network = NetworkMonitor()
+    let network = NetworkMonitor.shared
+    let cloud = CloudDownloadManager.shared
     /// "Wi-Fi에 연결되었습니다 …" 같은 잠깐 보이는 안내
     @Published private(set) var networkNotice: String?
     private var noticeTask: Task<Void, Never>?
+    private var cloudObserver: NSObjectProtocol?
 
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -179,6 +181,12 @@ final class AppModel: ObservableObject {
         refreshLibrary()
         network.onChange = { [weak self] old, new in
             self?.networkChanged(from: old, to: new)
+        }
+        // iCloud에서 파일을 다 받으면 보관함을 새로 읽는다(구름 표시 제거).
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: .cloudFileDownloaded, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshLibrary() }
         }
         restoreSavedJobs()
     }
@@ -431,6 +439,7 @@ final class AppModel: ObservableObject {
 
     private func networkChanged(from old: NetworkState, to new: NetworkState) {
         objectWillChange.send()
+        cloud.networkChanged()
         if new.allowsDownload {
             let waiting = jobs.filter { $0.status == .waitingForWiFi }
             for job in waiting { job.status = .pending }
@@ -552,6 +561,15 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: - 보관함
+
+    /// iCloud에만 있는 파일들을 Wi-Fi에서 받아 온다.
+    func downloadFromCloud(_ items: [LibraryItem]) {
+        cloud.request(items.filter(\.isCloudOnly).map(\.url))
+    }
+
+    var cloudOnlyCount: Int {
+        library.filter(\.isCloudOnly).count
+    }
 
     func refreshLibrary() {
         library = FileStore.libraryItems(in: outputDirectory)

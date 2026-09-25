@@ -6,6 +6,13 @@ struct SettingsView: View {
     @EnvironmentObject private var tools: ToolManager
 
     var body: some View {
+        VStack(spacing: 8) {
+            tabs
+            CreditFooter()
+        }
+    }
+
+    private var tabs: some View {
         TabView {
             generalTab
                 .tabItem { Label("일반", systemImage: "gearshape") }

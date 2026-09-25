@@ -9,6 +9,7 @@ cd "$(dirname "$0")/.."
 APP_NAME="AudioOnly"
 BUNDLE_ID="com.audioonly.app"
 VERSION="${VERSION:-1.1.0}"
+BUILD="${BUILD:-3}"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 
@@ -46,7 +47,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$BUILD</string>
   <key>CFBundleDevelopmentRegion</key><string>ko</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.music</string>

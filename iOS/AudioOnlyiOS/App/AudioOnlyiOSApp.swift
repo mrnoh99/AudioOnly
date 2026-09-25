@@ -171,7 +171,10 @@ struct ScreenView: View {
         content
             // 어느 화면에서든 아래쪽에 미니 플레이어
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                MiniPlayerBar()
+                VStack(spacing: 0) {
+                    MiniPlayerBar()
+                    CreditFooter()
+                }
             }
     }
 

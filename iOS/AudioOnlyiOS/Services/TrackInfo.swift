@@ -25,6 +25,8 @@ final class TrackInfoCache {
 
     func info(for url: URL) async -> TrackInfo {
         if let hit = cache[url] { return hit }
+        // iCloud에만 있는 파일을 읽으면 셀룰러로 몰래 받아질 수 있으므로 건드리지 않는다.
+        if CloudFiles.needsDownload(url) { return .empty }
         if let running = loading[url] { return await running.value }
         let task = Task.detached(priority: .utility) { await Self.load(url) }
         loading[url] = task
