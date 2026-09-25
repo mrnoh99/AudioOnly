@@ -62,6 +62,7 @@ final class AudioPlayer: ObservableObject {
     /// 받기가 끝나면 바로 재생할지
     private var playWhenDownloaded = false
     private var cloudObserver: NSObjectProtocol?
+    private var syncObservers: [NSObjectProtocol] = []
 
     @Published private(set) var sleepTimerEnd: Date?
     @Published private(set) var sleepAtEndOfTrack = false
@@ -85,6 +86,24 @@ final class AudioPlayer: ObservableObject {
         }
         observeAudioSession()
         configureRemoteCommands()
+        // 다른 기기에서 이름을 바꾸거나 지운 파일을 대기열에 반영
+        syncObservers.append(NotificationCenter.default.addObserver(
+            forName: .libraryItemMoved, object: nil, queue: .main
+        ) { [weak self] note in
+            let old = note.userInfo?["old"] as? URL
+            let new = note.userInfo?["new"] as? LibraryItem
+            MainActor.assumeIsolated {
+                guard let self, let old, let new else { return }
+                let placeholder = LibraryItem(url: old, folder: nil, modified: .distantPast, size: 0)
+                self.itemRenamed(from: placeholder, to: new)
+            }
+        })
+        syncObservers.append(NotificationCenter.default.addObserver(
+            forName: .libraryItemsRemoved, object: nil, queue: .main
+        ) { [weak self] note in
+            let urls = note.object as? [URL] ?? []
+            MainActor.assumeIsolated { self?.dropMissing(urls) }
+        })
         cloudObserver = NotificationCenter.default.addObserver(
             forName: .cloudFileDownloaded, object: nil, queue: .main
         ) { [weak self] note in
@@ -285,6 +304,15 @@ final class AudioPlayer: ObservableObject {
         queue = queue.map { $0 == old ? new : $0 }
         originalQueue = originalQueue.map { $0 == old ? new : $0 }
         if current == new { updateNowPlaying() }
+    }
+
+    /// 다른 기기에서 지워진 파일은 대기열에서 뺀다. 지금 재생 중인 곡은 끝까지 재생한다.
+    func dropMissing(_ urls: [URL]) {
+        let missing = Set(urls)
+        let now = current
+        queue.removeAll { missing.contains($0.url) && $0 != now }
+        originalQueue.removeAll { missing.contains($0.url) && $0 != now }
+        if let now, let i = queue.firstIndex(of: now) { index = i }
     }
 
     /// 보관함에서 파일을 지웠을 때 대기열에서도 뺀다.

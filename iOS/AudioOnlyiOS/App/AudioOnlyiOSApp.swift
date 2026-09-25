@@ -4,6 +4,7 @@ import SwiftUI
 struct AudioOnlyiOSApp: App {
     @StateObject private var model = AppModel()
     @StateObject private var player = AudioPlayer()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -11,6 +12,10 @@ struct AudioOnlyiOSApp: App {
                 .environmentObject(model)
                 .environmentObject(player)
                 .onOpenURL { model.handleOpenURL($0) }
+                // 앱으로 돌아오면 다른 기기의 변경(새 파일 · 이름 변경 · 삭제)을 곧바로 반영
+                .onChange(of: scenePhase) { _, phase in
+                    model.setActive(phase == .active)
+                }
         }
         .commands {
             // iPad 하드웨어 키보드: ⌘ 키를 누르고 있으면 단축키 목록이 보인다.

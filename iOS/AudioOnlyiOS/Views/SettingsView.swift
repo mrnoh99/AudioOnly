@@ -39,6 +39,19 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("iCloud 새 파일 자동 받기 (Wi-Fi)", isOn: $model.autoDownloadCloud)
+                    Button {
+                        model.syncNow()
+                    } label: {
+                        Label("지금 동기화", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                } header: {
+                    Text("기기 간 동기화")
+                } footer: {
+                    Text("여러 기기(iPhone · iPad · Mac)가 같은 iCloud Drive 폴더를 저장 위치로 쓰면, 한 기기에서 추가 · 이름 변경 · 삭제한 파일이 다른 기기의 보관함에도 자동으로 반영됩니다. 자동 받기를 켜 두면 새로 올라온 파일을 Wi-Fi에서 미리 받아 두어 바로 재생할 수 있습니다.")
+                }
+
+                Section {
                     Picker("출력 형식", selection: $model.format) {
                         ForEach(OutputFormat.allCases) { format in
                             Text(format.displayName).tag(format)

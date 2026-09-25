@@ -125,6 +125,7 @@ final class AppModel: ObservableObject {
         static let maxConcurrent = "maxConcurrent"
         static let outputFolderBookmark = "outputFolderBookmark"
         static let savedJobs = "savedJobs"
+        static let autoDownloadCloud = "autoDownloadCloud"
     }
 
     private let defaults = UserDefaults.standard
@@ -146,6 +147,13 @@ final class AppModel: ObservableObject {
         didSet {
             defaults.set(maxConcurrent, forKey: Keys.maxConcurrent)
             pump()
+        }
+    }
+    /// 다른 기기에서 iCloud로 올라온 새 파일을 Wi-Fi에서 자동으로 받아 둔다.
+    @Published var autoDownloadCloud: Bool {
+        didSet {
+            defaults.set(autoDownloadCloud, forKey: Keys.autoDownloadCloud)
+            if autoDownloadCloud { requestAutoDownloads() }
         }
     }
 
@@ -177,6 +185,7 @@ final class AppModel: ObservableObject {
         playlistNumbering = d.object(forKey: Keys.playlistNumbering) as? Bool ?? true
         let stored = d.integer(forKey: Keys.maxConcurrent)
         maxConcurrent = (1...4).contains(stored) ? stored : 2
+        autoDownloadCloud = d.object(forKey: Keys.autoDownloadCloud) as? Bool ?? true
         restoreOutputFolder()
         refreshLibrary()
         network.onChange = { [weak self] old, new in
@@ -189,6 +198,7 @@ final class AppModel: ObservableObject {
             MainActor.assumeIsolated { self?.refreshLibrary() }
         }
         restoreSavedJobs()
+        startWatching()
     }
 
     var activeJobCount: Int {
@@ -259,6 +269,7 @@ final class AppModel: ObservableObject {
             customOutputFolder = url
             outputFolderError = nil
             refreshLibrary()
+            startWatching()
         } catch {
             if accessing { url.stopAccessingSecurityScopedResource() }
             outputFolderError = "이 폴더는 저장 위치로 쓸 수 없습니다: \(error.localizedDescription)"
@@ -271,6 +282,7 @@ final class AppModel: ObservableObject {
         customOutputFolder = nil
         outputFolderError = nil
         refreshLibrary()
+        startWatching()
     }
 
     private func restoreOutputFolder() {
@@ -637,8 +649,98 @@ final class AppModel: ObservableObject {
         library.filter(\.isCloudOnly).count
     }
 
+    // MARK: - 폴더 동기화 (다른 기기에서 추가 · 이름 변경 · 삭제한 파일 반영)
+
+    private var watcher: FolderWatcher?
+    private var refreshTask: Task<Void, Never>?
+    private var periodicTask: Task<Void, Never>?
+    /// 파일 프레젠터가 알려 준 이름 변경(이전 → 새 경로). 다음 새로 읽기에서 처리한다.
+    private var pendingMoves: [URL: URL] = [:]
+
+    private func startWatching() {
+        watcher?.stop()
+        watcher = FolderWatcher(
+            url: outputDirectory,
+            onChange: { [weak self] in
+                Task { @MainActor in self?.scheduleRefresh() }
+            },
+            onMove: { [weak self] old, new in
+                Task { @MainActor in
+                    self?.pendingMoves[old.standardizedFileURL] = new.standardizedFileURL
+                }
+            }
+        )
+    }
+
+    /// 변경이 몰려 올 때 여러 번 읽지 않도록 잠깐 모았다가 한 번에 새로 읽는다.
+    func scheduleRefresh(delay: Double = 0.6) {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.refreshLibrary()
+        }
+    }
+
+    /// 앱이 앞에 있는 동안: 곧바로 한 번, 이후 20초마다 폴더를 다시 읽는다(동기화 알림이 늦거나 빠질 때 대비).
+    func setActive(_ active: Bool) {
+        periodicTask?.cancel()
+        periodicTask = nil
+        guard active else { return }
+        refreshLibrary()
+        cloud.networkChanged()
+        periodicTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                guard !Task.isCancelled else { return }
+                self?.refreshLibrary()
+            }
+        }
+    }
+
+    /// 지금 바로 동기화: 폴더를 다시 읽고 iCloud에만 있는 파일을 받는다(Wi-Fi).
+    func syncNow() {
+        refreshLibrary()
+        requestAutoDownloads(force: true)
+    }
+
     func refreshLibrary() {
+        let previous = library
         library = FileStore.libraryItems(in: outputDirectory)
+
+        // 다른 기기(또는 파일 앱)에서 이름을 바꾼 파일: 재생 대기열도 새 이름으로 바꾼다.
+        if !pendingMoves.isEmpty {
+            let moves = pendingMoves
+            pendingMoves = [:]
+            for (from, to) in moves {
+                guard let item = library.first(where: { $0.url == to }) else { continue }
+                NotificationCenter.default.post(
+                    name: .libraryItemMoved, object: nil, userInfo: ["old": from, "new": item]
+                )
+            }
+        }
+
+        // 다른 기기에서 지운 파일: 대기열에서도 뺀다.
+        let fm = FileManager.default
+        let current = Set(library.map(\.url))
+        let removed = previous.map(\.url).filter { url in
+            !current.contains(url)
+                && !fm.fileExists(atPath: url.path)
+                && !fm.fileExists(atPath: CloudFiles.placeholderURL(for: url).path)
+        }
+        if !removed.isEmpty {
+            TrackInfoCache.shared.invalidate(removed)
+            NotificationCenter.default.post(name: .libraryItemsRemoved, object: removed)
+        }
+
+        requestAutoDownloads()
+    }
+
+    /// iCloud에만 있는 파일을 받아 오도록 요청한다(Wi-Fi가 아니면 대기).
+    func requestAutoDownloads(force: Bool = false) {
+        guard autoDownloadCloud || force else { return }
+        let urls = library.filter(\.isCloudOnly).map(\.url)
+        if !urls.isEmpty { cloud.request(urls) }
     }
 
     func delete(_ items: [LibraryItem]) {
