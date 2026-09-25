@@ -11,29 +11,32 @@ struct ArtworkView: View {
     var cornerRadius: CGFloat = 8
 
     var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                ZStack {
-                    LinearGradient(
-                        colors: [Color(red: 1.0, green: 0.69, blue: 0.13), Color(red: 0.94, green: 0.31, blue: 0.06)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    Image(systemName: "music.note")
+        // 크기는 정사각형 틀이 정하고, 16:9 썸네일 같은 이미지는 그 안을 채우기만 한다.
+        // (이미지가 틀을 밀어내면 화면 전체가 옆으로 밀려 잘린다.)
+        Color.clear
+            .frame(width: size, height: size)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let image {
+                    Image(uiImage: image)
                         .resizable()
-                        .scaledToFit()
-                        .padding((size ?? 200) * 0.28)
-                        .foregroundStyle(.white.opacity(0.9))
+                        .scaledToFill()
+                } else {
+                    ZStack {
+                        LinearGradient(
+                            colors: [Color(red: 1.0, green: 0.69, blue: 0.13), Color(red: 0.94, green: 0.31, blue: 0.06)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        Image(systemName: "music.note")
+                            .resizable()
+                            .scaledToFit()
+                            .padding((size ?? 200) * 0.28)
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
                 }
             }
-        }
-        .frame(width: size, height: size)
-        .aspectRatio(1, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
@@ -144,29 +147,29 @@ struct NowPlayingView: View {
     var body: some View {
         GeometryReader { proxy in
             let wide = proxy.size.width > proxy.size.height
-            ZStack {
-                background
-                VStack(spacing: 0) {
-                    grabber
-                    if wide {
-                        HStack(spacing: isCompactHeight ? 28 : 48) {
-                            artwork(maxSide: min(proxy.size.height * (isCompactHeight ? 0.72 : 0.62), proxy.size.width * 0.42))
-                            controls.frame(maxWidth: 460)
-                        }
-                        .frame(maxHeight: .infinity)
-                        .padding(.horizontal, isCompactHeight ? 24 : 48)
-                    } else {
-                        Spacer(minLength: 12)
-                        artwork(maxSide: min(proxy.size.width - 64, proxy.size.height * 0.42, 520))
-                        Spacer(minLength: 20)
-                        controls
-                            .frame(maxWidth: 560)
-                            .padding(.horizontal, 28)
-                        Spacer(minLength: 12)
+            VStack(spacing: 0) {
+                grabber
+                if wide {
+                    HStack(spacing: isCompactHeight ? 28 : 48) {
+                        artwork(maxSide: min(proxy.size.height * (isCompactHeight ? 0.72 : 0.62), proxy.size.width * 0.42))
+                        controls.frame(maxWidth: 460)
                     }
+                    .frame(maxHeight: .infinity)
+                    .padding(.horizontal, isCompactHeight ? 24 : 48)
+                } else {
+                    Spacer(minLength: 12)
+                    artwork(maxSide: min(proxy.size.width - 64, proxy.size.height * 0.42, 520))
+                    Spacer(minLength: 20)
+                    controls
+                        .frame(maxWidth: 560)
+                        .padding(.horizontal, 28)
+                    Spacer(minLength: 12)
                 }
-                .padding(.bottom, 12)
             }
+            .padding(.bottom, 12)
+            // 내용은 항상 화면 폭에 맞춘다(배경 이미지 크기와 무관).
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background { background }
             .offset(y: dragOffset)
             .gesture(
                 DragGesture()
@@ -196,11 +199,15 @@ struct NowPlayingView: View {
         ZStack {
             Color(red: 0.25, green: 0.12, blue: 0.05)
             if let image = player.info.artwork {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .blur(radius: 60)
-                    .scaleEffect(1.4)
+                // overlay 안의 이미지는 부모 크기를 바꾸지 않는다.
+                Color.clear.overlay {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .blur(radius: 60)
+                        .scaleEffect(1.4)
+                }
+                .clipped()
             } else {
                 LinearGradient(
                     colors: [Color(red: 0.95, green: 0.55, blue: 0.15), Color(red: 0.45, green: 0.14, blue: 0.04)],
