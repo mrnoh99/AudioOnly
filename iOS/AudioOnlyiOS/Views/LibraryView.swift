@@ -43,8 +43,14 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             List {
+                if NetworkBanner.isVisible(model) {
+                    Section { NetworkBanner() }
+                }
                 if !model.jobs.isEmpty {
                     Section {
+                        if DownloadSummaryView.isVisible(model) {
+                            DownloadSummaryView()
+                        }
                         ForEach(model.jobs) { job in
                             JobRowView(job: job)
                         }
@@ -314,11 +320,22 @@ struct JobRowView: View {
                 } else {
                     ProgressView().progressViewStyle(.linear)
                 }
+            } else if job.status == .waitingForWiFi, let progress = job.progress, progress > 0 {
+                // 받다가 멈춘 만큼 표시
+                ProgressView(value: progress).tint(.orange)
             }
-            Text(job.statusText)
-                .font(.caption)
-                .foregroundStyle(statusColor)
-                .lineLimit(3)
+            HStack(alignment: .firstTextBaseline) {
+                Text(job.statusText)
+                    .foregroundStyle(statusColor)
+                    .lineLimit(3)
+                Spacer(minLength: 4)
+                if job.status == .downloading, let bytes = job.bytesText {
+                    Text(bytes)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.caption)
         }
         .padding(.vertical, 2)
         .swipeActions {
@@ -334,6 +351,7 @@ struct JobRowView: View {
         switch job.status {
         case .failed: return .red
         case .done: return .green
+        case .waitingForWiFi: return .orange
         default: return .secondary
         }
     }
@@ -342,6 +360,7 @@ struct JobRowView: View {
     private var statusIcon: some View {
         switch job.status {
         case .pending: Image(systemName: "clock").foregroundStyle(.secondary)
+        case .waitingForWiFi: Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange)
         case .downloading: Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
         case .converting: Image(systemName: "waveform.circle").foregroundStyle(.purple)
         case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
@@ -382,6 +401,12 @@ struct JobsPanelView: View {
     var body: some View {
         NavigationStack {
             List {
+                if NetworkBanner.isVisible(model) {
+                    NetworkBanner()
+                }
+                if DownloadSummaryView.isVisible(model) {
+                    DownloadSummaryView()
+                }
                 if model.jobs.isEmpty {
                     Text("추출 작업이 여기에 표시됩니다.")
                         .foregroundStyle(.secondary)

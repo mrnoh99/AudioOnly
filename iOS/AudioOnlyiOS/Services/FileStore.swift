@@ -25,6 +25,31 @@ enum FileStore {
         FileManager.default.temporaryDirectory.appendingPathComponent("Downloads", isDirectory: true)
     }
 
+    /// 받다 만 파일(이어받기용). 임시 폴더와 달리 시스템이 곧바로 지우지 않는 Caches에 둔다.
+    static var partialDownloadsDirectory: URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return caches.appendingPathComponent("PartialDownloads", isDirectory: true)
+    }
+
+    /// "<key>-<전체 바이트>.part" 형식의 받다 만 파일을 찾는다.
+    static func partialDownload(for key: String) -> (url: URL, total: Int64)? {
+        let directory = partialDownloadsDirectory
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return nil }
+        for name in names where name.hasPrefix(key + "-") && name.hasSuffix(".part") {
+            let middle = name.dropFirst(key.count + 1).dropLast(".part".count)
+            if let total = Int64(middle) {
+                return (directory.appendingPathComponent(name), total)
+            }
+        }
+        return nil
+    }
+
+    static func removePartialDownloads(for key: String) {
+        while let partial = partialDownload(for: key) {
+            guard (try? FileManager.default.removeItem(at: partial.url)) != nil else { break }
+        }
+    }
+
     private static let invalidCharacters = CharacterSet(charactersIn: "/:\\\0")
 
     static func sanitize(_ name: String) -> String {

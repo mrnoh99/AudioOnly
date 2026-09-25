@@ -62,9 +62,12 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("다운로드는 앱이 화면에 떠 있을 때 진행됩니다. 백그라운드로 가면 잠시 후 멈출 수 있습니다.")
+                    LabeledContent("현재 네트워크", value: model.network.state.title)
+                    Text("YouTube 오디오는 **Wi-Fi에서만** 다운로드합니다. 셀룰러 데이터일 때 추가한 작업은 ‘Wi-Fi 대기’로 보관되고, Wi-Fi에 연결되면 자동으로 시작합니다. 앱을 껐다 켜도 대기 중인 작업은 남아 있습니다.")
+                    Text("다운로드 중 Wi-Fi가 끊기면 받은 부분을 보관해 두었다가, 다시 연결되면 이어서 받습니다.")
+                    Text("다운로드는 앱이 열려 있거나 음악을 재생 중일 때 진행됩니다.")
                 } header: {
-                    Text("안내")
+                    Text("다운로드 안내")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)

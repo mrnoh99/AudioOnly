@@ -30,6 +30,15 @@
 추출한 파일은 기본적으로 **파일 앱 → 나의 iPhone(또는 나의 iPad) → AudioOnly** 에 저장됩니다.
 **설정 → 저장 위치 → 폴더 선택…** 에서 파일 앱의 다른 폴더(iCloud Drive, USB 드라이브 등)로 바꿀 수 있습니다.
 
+## Wi-Fi 다운로드
+
+- YouTube 오디오는 셀룰러 데이터 요금이 나가지 않도록 **Wi-Fi에서만** 다운로드합니다.
+- Wi-Fi가 아닐 때 추가한 작업은 **‘Wi-Fi 대기’** 로 보관되고, 화면 위쪽 안내에 이유와 대기 중인 개수가 표시됩니다.
+- **Wi-Fi에 연결되면 자동으로 다운로드를 시작**하고, 보관함에서 곡별 진행률(받은 MB / 전체 MB)과 **전체 진행 막대**(완료 수, 진행·대기·실패 수)를 보여 줍니다.
+- 다운로드 중 Wi-Fi가 끊기면 받은 부분을 보관했다가, 다시 연결되면 **이어서** 받습니다.
+- 앱을 껐다 켜도 받지 못한 작업은 남아 있습니다.
+- ‘파일’ 탭(이미 받은 영상에서 오디오 추출)은 Wi-Fi 없이도 됩니다.
+
 ## 음악 플레이어
 
 보관함의 오디오를 **Apple 음악 앱처럼** 재생합니다.
@@ -66,7 +75,7 @@ App Store 정책상 YouTube 다운로드 앱은 배포할 수 없으므로 **직
 
 무료 Apple ID로 설치한 앱은 7일마다 다시 설치해야 합니다(유료 개발자 계정은 1년).
 
-GitHub Actions가 서명되지 않은 `AudioOnly-unsigned.ipa` 도 만들어 둡니다.
+`main`에 올라간 최신 빌드는 [GitHub Releases의 **latest**](https://github.com/mrnoh99/AudioOnly/releases/tag/latest)에서 받을 수 있습니다. 서명되지 않은 `AudioOnly-unsigned.ipa`가 들어 있습니다.
 AltStore나 Sideloadly 같은 사이드로딩 도구로 본인 Apple ID 서명을 해서 설치할 수 있습니다.
 
 ## 구조

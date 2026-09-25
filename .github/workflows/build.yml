@@ -64,3 +64,36 @@ jobs:
         with:
           name: AudioOnly-iOS-unsigned
           path: build/AudioOnly-unsigned.ipa
+
+  # main에 올라온 빌드를 GitHub Releases의 "latest"로 공개한다(로그인 없이 받기 쉽게).
+  release:
+    name: Publish latest build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [macos, macos-xcode, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la dist
+          cat > notes.md <<NOTES
+          main 브랜치의 최신 자동 빌드입니다 (커밋 ${GITHUB_SHA::7}).
+
+          - **AudioOnly.dmg / AudioOnly.zip** — macOS 26 이상 (Apple Silicon · Intel). 처음 열 때 Finder에서 우클릭 → 열기.
+          - **AudioOnly-unsigned.ipa** — iPhone · iPad (iOS 18 이상). 서명되지 않았으므로 Sideloadly / AltStore로 본인 Apple ID 서명 후 설치하거나, Xcode에서 \`AudioOnly iOS\` 스킴으로 직접 설치하세요.
+          NOTES
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest \
+            dist/AudioOnly.dmg dist/AudioOnly.zip dist/AudioOnly-unsigned.ipa \
+            --target "$GITHUB_SHA" \
+            --title "AudioOnly 최신 빌드 (${GITHUB_SHA::7})" \
+            --notes-file notes.md \
+            --prerelease

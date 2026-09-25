@@ -59,6 +59,7 @@ UNIVERSAL=1 DMG=1 ./scripts/build-app.sh
 ```
 
 GitHub Actions(`.github/workflows/build.yml`)가 푸시할 때마다 유니버설 `AudioOnly.zip` / `AudioOnly.dmg`와 iOS용 서명 안 된 `.ipa`를 빌드해서 아티팩트로 올립니다.
+`main`에 올라간 빌드는 [**Releases → latest**](https://github.com/mrnoh99/AudioOnly/releases/tag/latest)에 자동으로 게시됩니다.
 ad-hoc 서명만 된 앱이라 처음 열 때 Gatekeeper가 막으면 Finder에서 **우클릭 → 열기**를 누르거나 다음을 실행하세요.
 
 ```bash

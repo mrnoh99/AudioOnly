@@ -18,6 +18,9 @@ struct URLInputView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if NetworkBanner.isVisible(model) {
+                    Section { NetworkBanner() }
+                }
                 Section {
                     ZStack(alignment: .topLeading) {
                         TextEditor(text: $text)
@@ -87,7 +90,11 @@ struct URLInputView: View {
     private func enqueue() {
         let ids = videoIDs
         model.enqueueVideos(ids.map { (id: $0, title: $0, number: nil) })
-        message = "\(ids.count)개 작업을 추가했습니다. 진행 상황은 ‘보관함’ 탭에서 볼 수 있습니다."
+        if model.network.state.allowsDownload {
+            message = "\(ids.count)개 작업을 추가했습니다. 진행 상황은 ‘보관함’ 탭에서 볼 수 있습니다."
+        } else {
+            message = "\(ids.count)개 작업을 ‘Wi-Fi 대기’로 추가했습니다. Wi-Fi에 연결되면 자동으로 다운로드를 시작합니다."
+        }
         text = ""
         focused = false
     }
@@ -107,6 +114,9 @@ struct PlaylistInputView: View {
     var body: some View {
         NavigationStack {
             List {
+                if NetworkBanner.isVisible(model) {
+                    Section { NetworkBanner() }
+                }
                 Section {
                     TextField("https://www.youtube.com/playlist?list=…", text: $url)
                         .keyboardType(.URL)
