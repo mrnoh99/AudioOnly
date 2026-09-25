@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 APP_NAME="AudioOnly"
 BUNDLE_ID="com.audioonly.app"
 VERSION="${VERSION:-1.1.0}"
-BUILD="${BUILD:-4}"
+BUILD="${BUILD:-5}"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 

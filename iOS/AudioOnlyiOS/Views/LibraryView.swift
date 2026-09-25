@@ -12,13 +12,19 @@ struct LibraryView: View {
     @EnvironmentObject private var player: AudioPlayer
     @State private var query = ""
     @State private var mode: Mode = .songs
+    // 정렬 설정은 앱을 다시 켜도 유지된다.
+    @AppStorage("library.songSort") private var songSort: SongSort = .dateAdded
+    @AppStorage("library.songAscending") private var songAscending = false
+    @AppStorage("library.folderSort") private var folderSort: FolderSort = .name
+    @AppStorage("library.folderAscending") private var folderAscending = true
 
+    /// 검색어로 거른 뒤 선택한 기준으로 정렬한 노래. 곡을 누르면 이 순서대로 재생한다.
     private var filteredLibrary: [LibraryItem] {
         let text = query.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return model.library }
-        return model.library.filter {
+        let matched = text.isEmpty ? model.library : model.library.filter {
             $0.name.localizedCaseInsensitiveContains(text) || ($0.folder ?? "").localizedCaseInsensitiveContains(text)
         }
+        return songSort.sort(matched, ascending: songAscending)
     }
 
     struct FolderGroup: Identifiable {
@@ -35,8 +41,25 @@ struct LibraryView: View {
                 FolderGroup(name: key, items: value.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
             }
             .sorted { lhs, rhs in
+                // '기타'(저장 폴더 바로 아래 파일)는 항상 맨 뒤
                 if lhs.name.isEmpty != rhs.name.isEmpty { return !lhs.name.isEmpty }
-                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                let result: ComparisonResult
+                switch folderSort {
+                case .name:
+                    result = lhs.name.localizedStandardCompare(rhs.name)
+                case .recent:
+                    let l = lhs.items.map(\.modified).max() ?? .distantPast
+                    let r = rhs.items.map(\.modified).max() ?? .distantPast
+                    result = l == r ? .orderedSame : (l < r ? .orderedAscending : .orderedDescending)
+                case .count:
+                    result = lhs.items.count == rhs.items.count
+                        ? .orderedSame
+                        : (lhs.items.count < rhs.items.count ? .orderedAscending : .orderedDescending)
+                }
+                if result == .orderedSame {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                return folderAscending ? result == .orderedAscending : result == .orderedDescending
             }
     }
 
@@ -124,6 +147,29 @@ struct LibraryView: View {
             }
             .searchable(text: $query, prompt: "저장된 오디오 검색")
             .navigationTitle("보관함")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if mode == .songs {
+                        SortMenu(
+                            keys: SongSort.allCases,
+                            selection: $songSort,
+                            ascending: $songAscending,
+                            title: \.title,
+                            systemImage: \.systemImage,
+                            orderTitles: \.orderTitles
+                        )
+                    } else {
+                        SortMenu(
+                            keys: FolderSort.allCases,
+                            selection: $folderSort,
+                            ascending: $folderAscending,
+                            title: \.title,
+                            systemImage: \.systemImage,
+                            orderTitles: \.orderTitles
+                        )
+                    }
+                }
+            }
             .refreshable { model.refreshLibrary() }
             .onAppear { model.refreshLibrary() }
         }
@@ -143,10 +189,12 @@ struct FolderDetailView: View {
     let title: String
     let folder: String
 
+    // 폴더 안에서는 기본으로 제목(번호) 순 — 재생목록 순서가 유지된다.
+    @AppStorage("library.folderSongSort") private var sort: SongSort = .title
+    @AppStorage("library.folderSongAscending") private var ascending = true
+
     private var items: [LibraryItem] {
-        model.library
-            .filter { ($0.folder ?? "") == folder }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        sort.sort(model.library.filter { ($0.folder ?? "") == folder }, ascending: ascending)
     }
 
     var body: some View {
@@ -176,6 +224,18 @@ struct FolderDetailView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                SortMenu(
+                    keys: SongSort.allCases.filter { $0 != .folder },
+                    selection: $sort,
+                    ascending: $ascending,
+                    title: \.title,
+                    systemImage: \.systemImage,
+                    orderTitles: \.orderTitles
+                )
+            }
+        }
     }
 
     private func delete(_ items: [LibraryItem]) {
