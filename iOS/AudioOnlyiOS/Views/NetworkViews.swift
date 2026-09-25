@@ -103,15 +103,17 @@ struct CloudStatusLine: View {
             VStack(alignment: .leading, spacing: 3) {
                 if let progress {
                     ProgressView(value: progress)
+                        .tint(.blue)
+                        .animation(.linear(duration: 0.4), value: progress)
                 } else {
-                    ProgressView().progressViewStyle(.linear)
+                    // iCloud가 비율을 알려 주지 않을 때: 멈춰 보이지 않도록 움직이는 막대
+                    IndeterminateBar()
                 }
-                Label(
-                    progress.map { String(format: "iCloud에서 받는 중 %.0f%%", $0 * 100) } ?? "iCloud에서 받는 중…",
-                    systemImage: "icloud.and.arrow.down"
-                )
-                .font(.caption)
-                .foregroundStyle(.blue)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Label(detailText(progress: progress, now: context.date), systemImage: "icloud.and.arrow.down")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.blue)
+                }
             }
         case .waitingForWiFi?:
             Label("Wi-Fi 대기 · Wi-Fi에 연결되면 iCloud에서 받습니다", systemImage: "wifi.slash")
@@ -126,6 +128,57 @@ struct CloudStatusLine: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+extension CloudStatusLine {
+    /// "iCloud에서 받는 중 45% · 3.2 MB / 7.1 MB" 또는 "iCloud에서 받는 중… 12초 · 7.1 MB"
+    func detailText(progress: Double?, now: Date) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        let size = cloud.size(for: url)
+        if let progress {
+            var text = String(format: "iCloud에서 받는 중 %.0f%%", progress * 100)
+            if let size {
+                let received = Int64(Double(size) * progress)
+                text += " · \(formatter.string(fromByteCount: received)) / \(formatter.string(fromByteCount: size))"
+            }
+            return text
+        }
+        var text = "iCloud에서 받는 중…"
+        if let start = cloud.startDate(for: url) {
+            text += " \(Int(now.timeIntervalSince(start)))초"
+        }
+        if let size {
+            text += " · \(formatter.string(fromByteCount: size))"
+        }
+        return text
+    }
+}
+
+/// 진행률을 모를 때 좌우로 움직이는 막대(멈춰 있지 않다는 표시)
+struct IndeterminateBar: View {
+    var color: Color = .blue
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let segment = max(width * 0.3, 24)
+                let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
+                let x = (width + segment) * phase - segment
+                ZStack(alignment: .leading) {
+                    Capsule().fill(color.opacity(0.18))
+                    Capsule()
+                        .fill(color)
+                        .frame(width: segment)
+                        .offset(x: x)
+                }
+                .clipShape(Capsule())
+            }
+        }
+        .frame(height: 4)
+        .accessibilityLabel("받는 중")
     }
 }
 
@@ -152,11 +205,16 @@ struct CloudLibraryBanner: View {
             }
             if cloud.downloadingCount > 0 {
                 if let progress = cloud.averageProgress {
-                    ProgressView(value: progress)
+                    ProgressView(value: progress).tint(.blue)
+                    Text(String(format: "받는 중 %d개 · %.0f%%", cloud.downloadingCount, progress * 100))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.blue)
+                } else {
+                    IndeterminateBar()
+                    Text("받는 중 \(cloud.downloadingCount)개…")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
                 }
-                Text(String(format: "받는 중 %d개 · %.0f%%", cloud.downloadingCount, (cloud.averageProgress ?? 0) * 100))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.blue)
             }
             if cloud.waitingCount > 0 {
                 Label("Wi-Fi 대기 \(cloud.waitingCount)개 — Wi-Fi에 연결되면 자동으로 받습니다", systemImage: "wifi.slash")

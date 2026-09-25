@@ -36,7 +36,15 @@ enum CloudFiles {
               let size = values.fileSize, size > 0
         else { return nil }
         let allocated = values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0
+        // 0이면 '아직 모름'으로 본다(가만히 있는 0% 막대 대신 움직이는 막대를 보여 주기 위해).
+        guard allocated > 0 else { return nil }
         return min(Double(allocated) / Double(size), 0.99)
+    }
+
+    static func fileSize(_ url: URL) -> Int64? {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .totalFileSizeKey])
+        let size = values?.fileSize ?? values?.totalFileSize
+        return size.flatMap { $0 > 0 ? Int64($0) : nil }
     }
 
     static func downloadError(_ url: URL) -> String? {
@@ -46,6 +54,9 @@ enum CloudFiles {
 }
 
 /// iCloud에만 있는 파일을 Wi-Fi에서 기기로 받아 오고 진행 상황을 알려 준다.
+///
+/// 진행률은 iCloud 메타데이터(NSMetadataQuery의 '받은 비율')에서 읽는다.
+/// iCloud가 비율을 알려 주지 않는 폴더면 움직이는 막대 + 경과 시간 + 파일 크기로 대신 보여 준다.
 @MainActor
 final class CloudDownloadManager: ObservableObject {
     static let shared = CloudDownloadManager()
@@ -61,9 +72,24 @@ final class CloudDownloadManager: ObservableObject {
     @Published private(set) var states: [URL: State] = [:]
     private var pollTask: Task<Void, Never>?
     private var startedAt: [URL: Date] = [:]
+    private var sizes: [URL: Int64] = [:]
+    /// iCloud 메타데이터에서 읽은 받은 비율(0…1)
+    private var reportedPercent: [URL: Double] = [:]
+    private var query: NSMetadataQuery?
+    private var queryObservers: [NSObjectProtocol] = []
 
     func state(for url: URL) -> State? {
         states[url.standardizedFileURL]
+    }
+
+    /// 받기 시작한 시각(경과 시간 표시용)
+    func startDate(for url: URL) -> Date? {
+        startedAt[url.standardizedFileURL]
+    }
+
+    /// 파일 전체 크기(알 수 있으면)
+    func size(for url: URL) -> Int64? {
+        sizes[url.standardizedFileURL]
     }
 
     /// 받아 달라고 요청. Wi-Fi면 바로, 아니면 Wi-Fi에 연결될 때 시작한다.
@@ -76,13 +102,18 @@ final class CloudDownloadManager: ObservableObject {
                 continue
             case .failed?, nil:
                 states[url] = .waitingForWiFi
+                if let size = CloudFiles.fileSize(url) { sizes[url] = size }
             }
         }
         startWaitingIfPossible()
     }
 
     func cancel(_ url: URL) {
-        states[url.standardizedFileURL] = nil
+        let key = url.standardizedFileURL
+        states[key] = nil
+        startedAt[key] = nil
+        reportedPercent[key] = nil
+        updateQuery()
     }
 
     var waitingCount: Int {
@@ -93,11 +124,13 @@ final class CloudDownloadManager: ObservableObject {
         states.values.filter { if case .downloading = $0 { return true } else { return false } }.count
     }
 
-    /// 받는 중인 파일들의 평균 진행률
+    /// 받는 중인 파일들의 평균 진행률 (하나라도 모르면 nil)
     var averageProgress: Double? {
-        let values = states.values.compactMap { state -> Double? in
-            if case .downloading(let p) = state { return p ?? 0 }
-            return nil
+        var values: [Double] = []
+        for state in states.values {
+            guard case .downloading(let p) = state else { continue }
+            guard let p else { return nil }
+            values.append(p)
         }
         guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
@@ -115,16 +148,99 @@ final class CloudDownloadManager: ObservableObject {
                 try FileManager.default.startDownloadingUbiquitousItem(at: url)
                 states[url] = .downloading(nil)
                 startedAt[url] = Date()
+                coordinateRead(url)
             } catch {
                 states[url] = .failed(error.localizedDescription)
             }
         }
+        updateQuery()
         ensurePolling()
     }
 
+    /// 파일 조정자로 읽기를 요청하면 시스템이 파일을 끝까지 받아 온 뒤 돌려준다.
+    /// 상태 값이 늦게 바뀌어도 '다 받음'을 바로 알 수 있다.
+    private func coordinateRead(_ url: URL) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            var error: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { _ in }
+            let failed = error?.localizedDescription
+            Task { @MainActor in
+                CloudDownloadManager.shared.coordinatedReadFinished(url, error: failed)
+            }
+        }
+    }
+
+    private func coordinatedReadFinished(_ url: URL, error: String?) {
+        guard case .downloading = states[url] else { return }
+        if let error, CloudFiles.needsDownload(url) {
+            states[url] = .failed(error)
+        } else if !CloudFiles.needsDownload(url) {
+            finish(url)
+        }
+    }
+
+    private func finish(_ url: URL) {
+        states[url] = nil
+        startedAt[url] = nil
+        reportedPercent[url] = nil
+        updateQuery()
+        NotificationCenter.default.post(name: .cloudFileDownloaded, object: url)
+    }
+
+    // MARK: - iCloud 메타데이터로 진행률 읽기
+
+    private func updateQuery() {
+        let paths = states.compactMap { url, state -> String? in
+            if case .downloading = state { return url.path }
+            return nil
+        }
+        query?.stop()
+        for observer in queryObservers { NotificationCenter.default.removeObserver(observer) }
+        queryObservers = []
+        query = nil
+        guard !paths.isEmpty else { return }
+
+        let query = NSMetadataQuery()
+        query.searchScopes = [
+            NSMetadataQueryUbiquitousDocumentsScope,
+            NSMetadataQueryAccessibleUbiquitousExternalDocumentsScope,
+        ]
+        let names = paths.map { ($0 as NSString).lastPathComponent }
+        query.predicate = NSPredicate(format: "%K IN %@", NSMetadataItemFSNameKey, names)
+        query.valueListAttributes = [NSMetadataUbiquitousItemPercentDownloadedKey]
+        let center = NotificationCenter.default
+        for name in [Notification.Name.NSMetadataQueryDidFinishGathering, .NSMetadataQueryDidUpdate] {
+            queryObservers.append(center.addObserver(forName: name, object: query, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.readQueryResults() }
+            })
+        }
+        self.query = query
+        query.start()
+    }
+
+    private func readQueryResults() {
+        guard let query else { return }
+        query.disableUpdates()
+        defer { query.enableUpdates() }
+        let wanted = Dictionary(uniqueKeysWithValues: states.keys.map { ($0.path, $0) })
+        for case let item as NSMetadataItem in query.results {
+            guard let path = (item.value(forAttribute: NSMetadataItemURLKey) as? URL)?.standardizedFileURL.path
+                ?? item.value(forAttribute: NSMetadataItemPathKey) as? String,
+                  let url = wanted[path]
+            else { continue }
+            if let percent = item.value(forAttribute: NSMetadataUbiquitousItemPercentDownloadedKey) as? Double {
+                reportedPercent[url] = min(max(percent / 100, 0), 1)
+                if case .downloading = states[url] {
+                    states[url] = .downloading(reportedPercent[url])
+                }
+            }
+        }
+    }
+
+    // MARK: - 상태 확인
+
     private func ensurePolling() {
-        guard pollTask == nil, states.values.contains(where: { if case .downloading = $0 { return true } else { return false } })
-        else { return }
+        guard pollTask == nil, downloadingCount > 0 else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.poll() else { break }
@@ -140,13 +256,13 @@ final class CloudDownloadManager: ObservableObject {
         for (url, state) in states {
             guard case .downloading = state else { continue }
             if !CloudFiles.needsDownload(url) {
-                states[url] = nil
-                startedAt[url] = nil
-                NotificationCenter.default.post(name: .cloudFileDownloaded, object: url)
+                finish(url)
             } else if let error = CloudFiles.downloadError(url) {
                 states[url] = .failed(error)
             } else {
-                states[url] = .downloading(CloudFiles.downloadProgress(url))
+                // iCloud가 알려 준 비율을 우선 쓰고, 없으면 기기에 채워진 크기로 추정한다.
+                let progress = reportedPercent[url] ?? CloudFiles.downloadProgress(url)
+                states[url] = .downloading(progress)
                 active = true
             }
         }
