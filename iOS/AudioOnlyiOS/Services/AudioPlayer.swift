@@ -3,6 +3,12 @@ import MediaPlayer
 import SwiftUI
 import UIKit
 
+/// 재생 위치(초). 자주 바뀌므로 AudioPlayer와 따로 둔다.
+@MainActor
+final class PlaybackClock: ObservableObject {
+    @Published var time: TimeInterval = 0
+}
+
 enum RepeatMode: CaseIterable {
     case off, all, one
 
@@ -49,7 +55,15 @@ final class AudioPlayer: ObservableObject {
     @Published private(set) var queue: [LibraryItem] = []
     @Published private(set) var index = 0
     @Published private(set) var isPlaying = false
-    @Published private(set) var currentTime: TimeInterval = 0
+    /// 재생 위치. 0.25초마다 바뀌므로 @Published로 두지 않는다 — 그러면 재생기를 보는 모든 화면
+    /// (보관함 목록 전체)이 초당 4번 다시 그려져 CPU를 다 써 버린다. 화면은 `clock`만 지켜본다.
+    private(set) var currentTime: TimeInterval = 0 {
+        didSet {
+            if clock.time != currentTime { clock.time = currentTime }
+        }
+    }
+    /// 재생 위치만 알려 주는 작은 관찰 대상 (진행 막대 · 스크러버 전용)
+    let clock = PlaybackClock()
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var info = TrackInfo.empty
     @Published private(set) var isShuffled = false
@@ -489,7 +503,8 @@ final class AudioPlayer: ObservableObject {
         guard player.currentItem != nil else { return }
         let seconds = time.seconds
         if seconds.isFinite { currentTime = seconds }
-        if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
+        if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0,
+           itemDuration != duration {
             duration = itemDuration
         }
         // '현재 곡이 끝나면' 타이머: 곡 끝 몇 초 전부터 서서히 줄인다.

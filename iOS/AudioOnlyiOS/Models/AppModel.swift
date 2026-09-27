@@ -706,7 +706,14 @@ final class AppModel: ObservableObject {
 
     func refreshLibrary() {
         let previous = library
-        library = FileStore.libraryItems(in: outputDirectory)
+        let fresh = FileStore.libraryItems(in: outputDirectory)
+        // 바뀐 것이 없으면 그대로 둔다(보관함 화면을 괜히 다시 그리지 않도록).
+        // LibraryItem의 == 는 경로만 비교하므로 표시에 쓰는 값까지 직접 비교한다.
+        let unchanged = fresh.count == previous.count && zip(fresh, previous).allSatisfy { a, b in
+            a.url == b.url && a.isCloudOnly == b.isCloudOnly && a.size == b.size
+                && a.modified == b.modified && a.folder == b.folder
+        }
+        if !unchanged { library = fresh }
 
         // 다른 기기(또는 파일 앱)에서 이름을 바꾼 파일: 재생 대기열도 새 이름으로 바꾼다.
         if !pendingMoves.isEmpty {

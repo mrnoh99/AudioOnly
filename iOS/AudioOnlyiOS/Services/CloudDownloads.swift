@@ -230,7 +230,7 @@ final class CloudDownloadManager: ObservableObject {
             else { continue }
             if let percent = item.value(forAttribute: NSMetadataUbiquitousItemPercentDownloadedKey) as? Double {
                 reportedPercent[url] = min(max(percent / 100, 0), 1)
-                if case .downloading = states[url] {
+                if case .downloading = states[url], states[url] != .downloading(reportedPercent[url]) {
                     states[url] = .downloading(reportedPercent[url])
                 }
             }
@@ -262,7 +262,8 @@ final class CloudDownloadManager: ObservableObject {
             } else {
                 // iCloud가 알려 준 비율을 우선 쓰고, 없으면 기기에 채워진 크기로 추정한다.
                 let progress = reportedPercent[url] ?? CloudFiles.downloadProgress(url)
-                states[url] = .downloading(progress)
+                // 값이 같으면 쓰지 않는다(@Published는 같은 값을 넣어도 화면을 다시 그리게 한다).
+                if states[url] != .downloading(progress) { states[url] = .downloading(progress) }
                 active = true
             }
         }

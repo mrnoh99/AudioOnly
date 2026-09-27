@@ -34,8 +34,8 @@ struct LibraryView: View {
     }
 
     /// 폴더(재생목록)별 묶음. 저장 폴더 바로 아래 파일은 '기타'.
-    private var folders: [FolderGroup] {
-        let groups = Dictionary(grouping: filteredLibrary) { $0.folder ?? "" }
+    private func folders(from songs: [LibraryItem]) -> [FolderGroup] {
+        let groups = Dictionary(grouping: songs) { $0.folder ?? "" }
         return groups
             .map { key, value in
                 FolderGroup(name: key, items: value.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
@@ -64,6 +64,8 @@ struct LibraryView: View {
     }
 
     var body: some View {
+        // 정렬은 화면을 그릴 때 한 번만 한다(행마다 다시 정렬하면 곡이 많을 때 매우 느려진다).
+        let songs = filteredLibrary
         NavigationStack {
             List {
                 if NetworkBanner.isVisible(model) {
@@ -107,24 +109,24 @@ struct LibraryView: View {
                         Section { CloudLibraryBanner() }
                     }
                     Section {
-                        PlayShuffleButtons(items: filteredLibrary)
+                        PlayShuffleButtons(items: songs)
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                     }
-                    Section("노래 \(filteredLibrary.count)곡") {
-                        ForEach(filteredLibrary) { item in
-                            LibraryRowView(item: item, playlist: filteredLibrary, onDelete: delete)
+                    Section("노래 \(songs.count)곡") {
+                        ForEach(songs) { item in
+                            LibraryRowView(item: item, playlist: songs, onDelete: delete)
                                 // iPad: 다른 앱(파일, 메일, GarageBand …)으로 끌어다 놓기
                                 .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
                         }
                         .onDelete { offsets in
-                            let visible = filteredLibrary
-                            delete(offsets.map { visible[$0] })
+                            delete(offsets.map { songs[$0] })
                         }
                     }
                 } else {
-                    Section("폴더 \(folders.count)개") {
-                        ForEach(folders) { folder in
+                    let groups = folders(from: songs)
+                    Section("폴더 \(groups.count)개") {
+                        ForEach(groups) { folder in
                             NavigationLink {
                                 FolderDetailView(
                                     title: folder.name.isEmpty ? "기타" : folder.name,
@@ -198,6 +200,7 @@ struct FolderDetailView: View {
     }
 
     var body: some View {
+        let items = self.items
         List {
             Section {
                 VStack(spacing: 12) {
@@ -217,8 +220,7 @@ struct FolderDetailView: View {
                     LibraryRowView(item: item, playlist: items, onDelete: delete)
                 }
                 .onDelete { offsets in
-                    let visible = items
-                    delete(offsets.map { visible[$0] })
+                    delete(offsets.map { items[$0] })
                 }
             }
         }

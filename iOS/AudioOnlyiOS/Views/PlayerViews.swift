@@ -109,13 +109,8 @@ struct MiniPlayerBar: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(alignment: .bottom) {
                 // 얇은 진행 막대
-                GeometryReader { proxy in
-                    Capsule()
-                        .fill(Color.accentColor)
-                        .frame(width: proxy.size.width * progress, height: 2)
-                }
-                .frame(height: 2)
-                .padding(.horizontal, 14)
+                MiniProgressLine(clock: player.clock, duration: player.duration)
+                    .padding(.horizontal, 14)
             }
             .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
             .padding(.horizontal, 10)
@@ -131,10 +126,25 @@ struct MiniPlayerBar: View {
             .accessibilityLabel("지금 재생 중: \(player.title)")
         }
     }
+}
+
+/// 미니 플레이어 아래의 얇은 진행 막대. 재생 위치(clock)만 지켜본다.
+struct MiniProgressLine: View {
+    @ObservedObject var clock: PlaybackClock
+    let duration: TimeInterval
+
+    var body: some View {
+        GeometryReader { proxy in
+            Capsule()
+                .fill(Color.accentColor)
+                .frame(width: proxy.size.width * progress, height: 2)
+        }
+        .frame(height: 2)
+    }
 
     private var progress: CGFloat {
-        guard player.duration > 0 else { return 0 }
-        return CGFloat(min(max(player.currentTime / player.duration, 0), 1))
+        guard duration > 0 else { return 0 }
+        return CGFloat(min(max(clock.time / duration, 0), 1))
     }
 }
 
@@ -145,7 +155,6 @@ struct NowPlayingView: View {
     @Environment(\.dismiss) private var dismiss
     /// iPhone 가로 화면처럼 세로 공간이 좁은 경우
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var scrubTime: TimeInterval?
     @State private var showQueue = false
     @State private var dragOffset: CGFloat = 0
 
@@ -318,30 +327,7 @@ struct NowPlayingView: View {
     }
 
     private var scrubber: some View {
-        let shown = scrubTime ?? player.currentTime
-        let total = max(player.duration, 1)
-        return VStack(spacing: 4) {
-            Slider(
-                value: Binding(
-                    get: { min(shown, total) },
-                    set: { scrubTime = $0 }
-                ),
-                in: 0...total,
-                onEditingChanged: { editing in
-                    if !editing, let time = scrubTime {
-                        player.seek(to: time)
-                        scrubTime = nil
-                    }
-                }
-            )
-            HStack {
-                Text(Self.format(shown))
-                Spacer()
-                Text("-" + Self.format(max(player.duration - shown, 0)))
-            }
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.white.opacity(0.65))
-        }
+        ScrubberView(clock: player.clock)
     }
 
     private var transport: some View {
@@ -558,4 +544,38 @@ struct AirPlayButton: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+
+/// 지금 재생 중 화면의 재생 위치 막대. 재생 위치(clock)만 지켜본다.
+struct ScrubberView: View {
+    @EnvironmentObject private var player: AudioPlayer
+    @ObservedObject var clock: PlaybackClock
+    @State private var scrubTime: TimeInterval?
+
+    var body: some View {
+        let shown = scrubTime ?? clock.time
+        let total = max(player.duration, 1)
+        VStack(spacing: 4) {
+            Slider(
+                value: Binding(
+                    get: { min(shown, total) },
+                    set: { scrubTime = $0 }
+                ),
+                in: 0...total,
+                onEditingChanged: { editing in
+                    if !editing, let time = scrubTime {
+                        player.seek(to: time)
+                        scrubTime = nil
+                    }
+                }
+            )
+            HStack {
+                Text(NowPlayingView.format(shown))
+                Spacer()
+                Text("-" + NowPlayingView.format(max(player.duration - shown, 0)))
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.white.opacity(0.65))
+        }
+    }
 }
