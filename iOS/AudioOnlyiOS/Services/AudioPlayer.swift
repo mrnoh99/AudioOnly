@@ -89,6 +89,14 @@ final class AudioPlayer: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var sessionObservers: [NSObjectProtocol] = []
     private var sleepTask: Task<Void, Never>?
+    /// 지금 AVPlayer에 올라가 있는 곡(위치를 기억할 대상)
+    private var loadedItem: LibraryItem?
+    /// 마지막으로 위치를 기억한 재생 시각(몇 초마다만 저장)
+    private var lastRememberedTime: TimeInterval = -1
+    private var didRestoreSession = false
+    /// 기억한 위치로 옮기는 중(끝나기 전의 0초 같은 값으로 기억을 덮어쓰지 않도록)
+    private var isSeekingToSaved = false
+    private var lifecycleObservers: [NSObjectProtocol] = []
 
     init() {
         player.automaticallyWaitsToMinimizeStalling = false
@@ -100,6 +108,14 @@ final class AudioPlayer: ObservableObject {
         }
         observeAudioSession()
         configureRemoteCommands()
+        // 앱이 백그라운드로 가거나 끝날 때 듣던 위치를 저장
+        for name in [UIApplication.didEnterBackgroundNotification, UIApplication.willTerminateNotification] {
+            lifecycleObservers.append(NotificationCenter.default.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.rememberAll() }
+            })
+        }
         // 다른 기기에서 이름을 바꾸거나 지운 파일을 대기열에 반영
         syncObservers.append(NotificationCenter.default.addObserver(
             forName: .libraryItemMoved, object: nil, queue: .main
@@ -225,6 +241,7 @@ final class AudioPlayer: ObservableObject {
         playWhenDownloaded = false
         player.pause()
         isPlaying = false
+        rememberAll()
         updateNowPlaying()
     }
 
@@ -315,6 +332,8 @@ final class AudioPlayer: ObservableObject {
     /// 보관함에서 파일 이름을 바꿨을 때 대기열의 항목도 새 경로로 바꾼다.
     /// 재생 중인 곡은 이미 열린 파일로 계속 재생된다.
     func itemRenamed(from old: LibraryItem, to new: LibraryItem) {
+        PlaybackMemory.moved(from: old.url, to: new.url)
+        if loadedItem == old { loadedItem = new }
         queue = queue.map { $0 == old ? new : $0 }
         originalQueue = originalQueue.map { $0 == old ? new : $0 }
         if current == new { updateNowPlaying() }
@@ -343,6 +362,8 @@ final class AudioPlayer: ObservableObject {
     }
 
     func stop() {
+        rememberPosition()
+        loadedItem = nil
         cancelSleepTimer()
         isWaitingForCloud = false
         playWhenDownloaded = false
@@ -357,6 +378,7 @@ final class AudioPlayer: ObservableObject {
         info = .empty
         showNowPlaying = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        PlaybackMemory.saveSession(nil)
     }
 
     // MARK: - 잠자기 타이머
@@ -427,6 +449,12 @@ final class AudioPlayer: ObservableObject {
             stop()
             return
         }
+        // 다른 곡으로 넘어가기 전에 듣던 곡의 위치를 기억한다(끝까지 들었으면 지워진다).
+        if loadedItem != nil { rememberPosition() }
+        loadedItem = nil
+        isSeekingToSaved = false
+        lastRememberedTime = -1
+        saveSession()
 
         // iCloud에만 있는 곡: Wi-Fi에서 받은 뒤 재생한다(받는 동안 진행 상황 표시).
         if CloudFiles.needsDownload(item.url) {
@@ -457,8 +485,20 @@ final class AudioPlayer: ObservableObject {
         }
 
         player.replaceCurrentItem(with: playerItem)
+        loadedItem = item
         currentTime = 0
         duration = 0
+        // 전에 듣다 만 곡이면 그 위치부터
+        if let saved = PlaybackMemory.position(for: item.url) {
+            isSeekingToSaved = true
+            player.seek(
+                to: CMTime(seconds: saved, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero
+            ) { [weak self] _ in
+                Task { @MainActor in self?.isSeekingToSaved = false }
+            }
+            currentTime = saved
+            lastRememberedTime = saved
+        }
         info = TrackInfo(title: item.name, artist: item.folder, artwork: nil, duration: 0)
 
         Task { [weak self] in
@@ -483,7 +523,62 @@ final class AudioPlayer: ObservableObject {
         }
     }
 
+    // MARK: - 이어 듣기
+
+    /// 지금 곡의 위치를 기억한다.
+    private func rememberPosition() {
+        guard let item = loadedItem, player.currentItem != nil, !isSeekingToSaved else { return }
+        PlaybackMemory.save(currentTime, duration: duration, for: item.url)
+        lastRememberedTime = currentTime
+    }
+
+    /// 위치와 대기열을 함께 저장(일시정지 · 백그라운드 전환 때)
+    private func rememberAll() {
+        rememberPosition()
+        saveSession()
+    }
+
+    private func saveSession() {
+        guard !queue.isEmpty else { return }
+        PlaybackMemory.saveSession(PlaybackMemory.Session(
+            queue: queue.map { PlaybackMemory.key(for: $0.url) },
+            original: originalQueue.map { PlaybackMemory.key(for: $0.url) },
+            index: index,
+            shuffled: isShuffled,
+            repeatMode: String(describing: repeatMode)
+        ))
+    }
+
+    /// 앱을 다시 켰을 때: 지난번 대기열과 곡을 일시정지 상태로 불러온다(재생을 누르면 듣던 곳부터).
+    func restoreSession(from library: [LibraryItem]) {
+        guard !didRestoreSession else { return }
+        didRestoreSession = true
+        guard current == nil, let session = PlaybackMemory.loadSession() else { return }
+        var byKey: [String: LibraryItem] = [:]
+        for item in library { byKey[PlaybackMemory.key(for: item.url)] = item }
+        let restored = session.queue.compactMap { byKey[$0] }
+        guard !restored.isEmpty else { return }
+        let wanted = session.queue.indices.contains(session.index) ? session.queue[session.index] : nil
+        queue = restored
+        originalQueue = session.original.compactMap { byKey[$0] }
+        if originalQueue.isEmpty { originalQueue = restored }
+        index = wanted.flatMap { key in restored.firstIndex { PlaybackMemory.key(for: $0.url) == key } } ?? 0
+        isShuffled = session.shuffled
+        repeatMode = RepeatMode.allCases.first { String(describing: $0) == session.repeatMode } ?? .off
+        // iCloud에만 있는 곡이면 받지 않고 기다린다(재생을 누르면 그때 받는다).
+        if CloudFiles.needsDownload(restored[index].url) {
+            isWaitingForCloud = true
+            info = TrackInfo(title: restored[index].name, artist: restored[index].folder, artwork: nil, duration: 0)
+            updateNowPlaying()
+        } else {
+            loadCurrent(autoplay: false)
+        }
+    }
+
     private func itemDidFinish() {
+        // 끝까지 들은 곡은 다음에 처음부터
+        if let item = loadedItem { PlaybackMemory.forget(item.url) }
+        lastRememberedTime = duration
         if sleepAtEndOfTrack {
             pause()
             player.volume = 1
@@ -502,7 +597,9 @@ final class AudioPlayer: ObservableObject {
     private func tick(_ time: CMTime) {
         guard player.currentItem != nil else { return }
         let seconds = time.seconds
-        if seconds.isFinite { currentTime = seconds }
+        if seconds.isFinite, !isSeekingToSaved { currentTime = seconds }
+        // 앱이 갑자기 끝나도 크게 되돌아가지 않도록 재생 중에는 5초마다 위치를 기억
+        if isPlaying, abs(currentTime - lastRememberedTime) >= 5 { rememberPosition() }
         if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0,
            itemDuration != duration {
             duration = itemDuration

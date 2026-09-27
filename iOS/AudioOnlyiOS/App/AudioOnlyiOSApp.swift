@@ -12,6 +12,8 @@ struct AudioOnlyiOSApp: App {
                 .environmentObject(model)
                 .environmentObject(player)
                 .onOpenURL { model.handleOpenURL($0) }
+                // 지난번에 듣던 곡을 일시정지 상태로 불러온다(재생을 누르면 듣던 곳부터)
+                .task { player.restoreSession(from: model.library) }
                 // 앱으로 돌아오면 다른 기기의 변경(새 파일 · 이름 변경 · 삭제)을 곧바로 반영
                 .onChange(of: scenePhase) { _, phase in
                     model.setActive(phase == .active)
