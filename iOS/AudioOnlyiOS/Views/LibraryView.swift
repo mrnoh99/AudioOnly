@@ -288,6 +288,7 @@ struct LibraryRowView: View {
     @State private var isRenaming = false
     @State private var newName = ""
     @State private var renameError: String?
+    @State private var isBoosting = false
 
     private var isCurrent: Bool { player.current == item }
 
@@ -364,6 +365,12 @@ struct LibraryRowView: View {
             } label: {
                 Label("이름 변경", systemImage: "pencil")
             }
+            Button {
+                isBoosting = true
+            } label: {
+                Label("음량 올리기", systemImage: "speaker.plus")
+            }
+            .disabled(item.isCloudOnly)
             Button(role: .destructive) {
                 onDelete([item])
             } label: {
@@ -378,6 +385,9 @@ struct LibraryRowView: View {
                 .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
             Text("확장자(.\(item.url.pathExtension))는 그대로 유지됩니다.")
+        }
+        .sheet(isPresented: $isBoosting) {
+            VolumeBoostSheet(item: item)
         }
         .alert(
             "이름을 바꿀 수 없습니다",
@@ -412,6 +422,118 @@ extension LibraryRowView {
             player.itemRenamed(from: item, to: renamed)
         } catch {
             renameError = error.localizedDescription
+        }
+    }
+}
+
+/// 파일의 음량을 몇 % 올릴지 고르고 저장한다.
+struct VolumeBoostSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var player: AudioPlayer
+    @Environment(\.dismiss) private var dismiss
+    let item: LibraryItem
+
+    @AppStorage("library.volumeBoostPercent") private var percent = 50.0
+    @State private var progress: Double?
+    @State private var errorText: String?
+    @State private var task: Task<Void, Never>?
+
+    private static let presets: [Double] = [10, 25, 50, 100, 200]
+
+    private var gainText: String {
+        let gain = 1 + percent / 100
+        let decibels = 20 * log10(gain)
+        return String(format: "원래 소리의 %g배 (+%.1f dB)", gain, decibels)
+    }
+
+    private var isWorking: Bool { progress != nil }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(item.name).lineLimit(2)
+                }
+                Section {
+                    HStack {
+                        Text("올릴 음량")
+                        Spacer()
+                        Text("+\(Int(percent))%")
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    Slider(value: $percent, in: 10...300, step: 5)
+                    HStack {
+                        ForEach(Self.presets, id: \.self) { value in
+                            Button("\(Int(value))%") { percent = value }
+                                .buttonStyle(.bordered)
+                                .tint(percent == value ? Color.accentColor : Color.secondary)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .font(.caption)
+                } footer: {
+                    Text(footerText)
+                }
+                .disabled(isWorking)
+
+                if let progress {
+                    Section {
+                        ProgressView(value: progress) { Text("저장 중…") }
+                    }
+                }
+                if let errorText {
+                    Section {
+                        Text(errorText).foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("음량 올리기")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("취소") {
+                        task?.cancel()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("저장") { start() }
+                        .disabled(isWorking)
+                }
+            }
+            .interactiveDismissDisabled(isWorking)
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var footerText: String {
+        let ext = item.url.pathExtension.lowercased()
+        let target = ext == "m4a" || ext == "wav"
+            ? "이 파일에 바로 저장합니다."
+            : "\(ext.uppercased()) 파일은 같은 이름의 M4A 파일로 바꿔 저장합니다."
+        return "\(gainText). \(target) 너무 크게 올리면 큰 소리 부분이 잘려 찌그러질 수 있습니다."
+    }
+
+    private func start() {
+        errorText = nil
+        progress = 0
+        let percent = Int(percent)
+        task = Task {
+            do {
+                let updated = try await model.boostVolume(item, percent: percent) { value in
+                    Task { @MainActor in progress = max(progress ?? 0, value) }
+                }
+                if updated.url != item.url {
+                    player.itemRenamed(from: item, to: updated)
+                }
+                dismiss()
+            } catch is CancellationError {
+                progress = nil
+            } catch {
+                progress = nil
+                errorText = error.localizedDescription
+            }
         }
     }
 }

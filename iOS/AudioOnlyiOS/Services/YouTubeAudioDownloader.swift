@@ -98,16 +98,16 @@ enum YouTubeAudioDownloader {
         update(.converting(0))
         switch format {
         case .m4a:
-            // 소리를 키워 다시 인코딩하면서 제목/앨범 아트를 넣는다. (DASH 조각 파일 → 일반 m4a)
+            // 재인코딩 없이 다시 담으면서 제목/앨범 아트를 넣는다. (DASH 조각 파일 → 일반 m4a)
             let items = AudioConverter.metadataItems(title: title, artist: nil, artwork: artwork)
             do {
-                try await AudioConverter.exportM4A(from: raw, to: output, metadata: items) {
+                try await AudioConverter.exportM4A(from: raw, to: output, passthrough: true, metadata: items) {
                     update(.converting($0))
                 }
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                // 변환에 실패하면 받은 파일을 그대로 쓴다.
+                // 다시 담기에 실패하면 받은 파일을 그대로 쓴다.
                 try? fm.removeItem(at: output)
                 try fm.moveItem(at: raw, to: output)
             }

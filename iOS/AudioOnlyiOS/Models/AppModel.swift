@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -638,6 +639,68 @@ final class AppModel: ObservableObject {
             size: item.size,
             isCloudOnly: item.isCloudOnly
         )
+    }
+
+    /// 파일의 음량을 `percent`% 올려 저장한다. m4a · wav는 같은 파일을 바꾸고,
+    /// 그 밖의 형식(mp3 등)은 같은 이름의 m4a로 바꿔 저장한다. 파일 날짜는 그대로 둔다.
+    func boostVolume(
+        _ item: LibraryItem,
+        percent: Int,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> LibraryItem {
+        let fm = FileManager.default
+        let source = item.url
+        let isWAV = source.pathExtension.lowercased() == "wav"
+        let outputExtension = isWAV ? "wav" : "m4a"
+        let destination: URL
+        if source.pathExtension.lowercased() == outputExtension {
+            destination = source
+        } else {
+            destination = NameReservations.shared.reserveUniqueURL(
+                baseName: item.name, fileExtension: outputExtension, in: source.deletingLastPathComponent()
+            )
+        }
+        defer { if destination != source { NameReservations.shared.release(destination) } }
+
+        let temp = fm.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(outputExtension)
+        defer { try? fm.removeItem(at: temp) }
+        try await AudioConverter.exportAmplified(
+            from: source,
+            to: temp,
+            fileType: isWAV ? .wav : .m4a,
+            gain: 1 + Float(percent) / 100,
+            progress: progress
+        )
+        try Task.checkCancellation()
+
+        // iCloud Drive 폴더에서도 안전하도록 파일 조정자로 바꿔 넣는다.
+        var coordinatorError: NSError?
+        var writeError: Error?
+        NSFileCoordinator().coordinate(writingItemAt: destination, options: .forReplacing, error: &coordinatorError) { url in
+            do {
+                if fm.fileExists(atPath: url.path) {
+                    try fm.removeItem(at: url)
+                }
+                try fm.copyItem(at: temp, to: url)
+                try? fm.setAttributes([.modificationDate: item.modified], ofItemAtPath: url.path)
+            } catch {
+                writeError = error
+            }
+        }
+        if let error = coordinatorError ?? writeError { throw error }
+
+        if destination != source {
+            NSFileCoordinator().coordinate(writingItemAt: source, options: .forDeleting, error: &coordinatorError) { url in
+                try? fm.removeItem(at: url)
+            }
+        }
+
+        TrackInfoCache.shared.invalidate([source, destination])
+        refreshLibrary()
+        let size = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? item.size
+        return LibraryItem(url: destination, folder: item.folder, modified: item.modified, size: size)
     }
 
     /// iCloud에만 있는 파일들을 Wi-Fi에서 받아 온다.
