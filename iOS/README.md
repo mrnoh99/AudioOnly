@@ -79,7 +79,7 @@ iOS 앱은 yt-dlp · ffmpeg 같은 외부 프로그램을 실행할 수 없어�
 - YouTube 스트림 찾기: [YouTubeKit](https://github.com/alexeichhorn/YouTubeKit) (Swift 패키지)
 - 재생목록: YouTube 재생목록 페이지와 내부 browse API를 직접 해석 (100개 넘는 목록도 이어서 불러옴)
 - 오디오 변환: AVFoundation
-- 출력 형식: YouTube의 원본 AAC 오디오를 **재인코딩 없이 M4A**로 저장하거나 WAV로 변환합니다.
+- 출력 형식: 오디오를 M4A(AAC 256kbps) 또는 WAV로 저장합니다. 저장할 때 소리 크기를 **2배(100% 크게, +6dB)**로 키웁니다.
   iOS에는 MP3 인코더가 없어 MP3는 지원하지 않습니다.
 - 다운로드는 앱이 화면에 떠 있을 때 진행됩니다. 작업 중에는 화면이 자동으로 꺼지지 않습니다.
 

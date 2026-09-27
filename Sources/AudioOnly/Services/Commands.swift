@@ -26,6 +26,10 @@ enum YTDLPCommand {
         if let ffmpeg = options.ffmpegURL {
             args += ["--ffmpeg-location", ffmpeg.path]
         }
+        // 소리를 키우려면 재인코딩해야 하므로, yt-dlp가 원본 코덱을 그대로 복사(-acodec copy)하려 해도
+        // 뒤에 붙는 코덱 인자가 덮어쓰게 한다.
+        let volumeArgs = AudioVolume.ffmpegFilterArguments + options.format.ffmpegCodecArguments(bitrate: options.bitrate)
+        args += ["--postprocessor-args", "ExtractAudio:" + volumeArgs.joined(separator: " ")]
         if options.embedMetadata {
             args.append("--embed-metadata")
         }
@@ -54,6 +58,14 @@ enum YTDLPCommand {
     }
 }
 
+/// 저장하는 오디오의 소리 크기
+enum AudioVolume {
+    /// 2.0 = 원래보다 100% 크게(+6dB). 최대값을 넘는 부분은 잘린다.
+    static let gain = 2.0
+
+    static var ffmpegFilterArguments: [String] { ["-af", "volume=\(gain)"] }
+}
+
 enum FFmpegCommand {
     static func extractArguments(input: URL, output: URL, options: ExtractOptions) -> [String] {
         var args = [
@@ -64,6 +76,7 @@ enum FFmpegCommand {
             "-map", "0:a:0",
             "-vn", "-sn", "-dn",
         ]
+        args += AudioVolume.ffmpegFilterArguments
         args += options.format.ffmpegCodecArguments(bitrate: options.bitrate)
         args += ["-map_metadata", options.embedMetadata ? "0" : "-1"]
         args += ["-progress", "pipe:1", "-nostats", output.path]

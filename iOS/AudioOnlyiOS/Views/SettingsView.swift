@@ -62,7 +62,7 @@ struct SettingsView: View {
                 } header: {
                     Text("오디오")
                 } footer: {
-                    Text("YouTube 오디오는 재인코딩 없이 원본 AAC(M4A) 그대로 저장합니다. WAV는 용량이 약 10배 큽니다.")
+                    Text("저장할 때 소리를 2배(100%) 크게 키웁니다. WAV는 M4A보다 용량이 약 5배 큽니다.")
                 }
 
                 Section("재생목록") {
