@@ -71,6 +71,68 @@ enum FFmpegCommand {
     }
 }
 
+/// 이미 저장된 오디오 파일의 음량을 올려 같은 형식으로 다시 저장한다.
+enum VolumeBoostCommand {
+    /// 음량을 올릴 수 있는 형식 (확장자 → ffmpeg 인코더 인자)
+    private static let codecArguments: [String: [String]] = [
+        "mp3": ["-c:a", "libmp3lame", "-b:a", "320k"],
+        "m4a": ["-c:a", "aac", "-b:a", "256k"],
+        "aac": ["-c:a", "aac", "-b:a", "256k"],
+        "opus": ["-c:a", "libopus", "-b:a", "192k"],
+        "ogg": ["-c:a", "libvorbis", "-q:a", "6"],
+        "oga": ["-c:a", "libvorbis", "-q:a", "6"],
+        "flac": ["-c:a", "flac"],
+        "wav": ["-c:a", "pcm_s16le"],
+        "aiff": ["-c:a", "pcm_s16be"],
+        "aif": ["-c:a", "pcm_s16be"],
+    ]
+    /// 앨범 아트(첨부 그림)를 그대로 옮길 수 있는 형식
+    private static let artworkExtensions: Set<String> = ["mp3", "m4a", "flac"]
+
+    static var supportedExtensions: Set<String> { Set(codecArguments.keys) }
+
+    static func isSupported(_ url: URL) -> Bool {
+        codecArguments[url.pathExtension.lowercased()] != nil
+    }
+
+    /// 파일과 폴더(하위 폴더 포함)에서 음량을 올릴 수 있는 오디오 파일을 모은다.
+    static func collectAudioFiles(from urls: [URL]) -> [URL] {
+        FileNaming.collectMediaFiles(from: urls).filter(isSupported)
+    }
+
+    /// `percent`% 올린 소리 배율 (예: 50 → 1.5)
+    static func gain(percent: Int) -> Double { 1 + Double(percent) / 100 }
+
+    /// 같은 폴더에 숨김 임시 파일로 쓴 뒤 원본과 바꿔 넣는다(같은 볼륨이라 교체가 한 번에 된다).
+    static func temporaryOutputURL(for input: URL) -> URL {
+        input.deletingLastPathComponent()
+            .appendingPathComponent(".\(UUID().uuidString)")
+            .appendingPathExtension(input.pathExtension)
+    }
+
+    static func arguments(input: URL, output: URL, percent: Int) -> [String] {
+        let ext = input.pathExtension.lowercased()
+        var args = [
+            "-hide_banner",
+            "-nostdin",
+            "-y",
+            "-i", input.path,
+            "-map", "0:a:0",
+        ]
+        if artworkExtensions.contains(ext) {
+            args += ["-map", "0:v?", "-c:v", "copy"]
+        }
+        args += ["-af", "volume=\(gain(percent: percent))"]
+        args += codecArguments[ext] ?? []
+        args += ["-map_metadata", "0"]
+        if ext == "mp3" {
+            args += ["-id3v2_version", "3"]
+        }
+        args += ["-progress", "pipe:1", "-nostats", output.path]
+        return args
+    }
+}
+
 enum FileNaming {
     private static let invalidCharacters = CharacterSet(charactersIn: "/:\\\0")
 

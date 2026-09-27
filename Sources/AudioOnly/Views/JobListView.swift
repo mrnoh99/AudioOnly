@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct JobListView: View {
+    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var queue: JobQueue
 
     var body: some View {
@@ -10,6 +11,12 @@ struct JobListView: View {
                 Text("작업 목록").font(.headline)
                 Text("\(queue.jobs.count)").foregroundStyle(.secondary)
                 Spacer()
+                Button {
+                    queue.chooseVolumeBoostFiles(in: settings.outputDirectory)
+                } label: {
+                    Label("음량 올리기…", systemImage: "speaker.plus")
+                }
+                .help("저장된 오디오 파일을 골라 음량을 올립니다.")
                 Button("모두 취소") { queue.cancelAll() }
                     .disabled(queue.jobs.isEmpty)
                 Button("완료 항목 지우기") { queue.clearFinished() }
@@ -80,6 +87,12 @@ struct JobRowView: View {
         }
         .padding(.vertical, 3)
         .contextMenu {
+            if job.status == .done, let output = job.outputURL, VolumeBoostCommand.isSupported(output) {
+                Button("음량 올리기…") {
+                    queue.volumeBoostRequest = VolumeBoostRequest(files: [output])
+                }
+                Divider()
+            }
             Button("로그 보기") { showLog = true }
             Button("목록에서 제거") { queue.remove(job) }
         }

@@ -34,6 +34,14 @@ struct AudioOnlyApp: App {
                 .task { await tools.refresh(settings: settings) }
         }
         .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("음량 올리기…") {
+                    queue.chooseVolumeBoostFiles(in: settings.outputDirectory)
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+            }
+        }
 
         Settings {
             SettingsView()

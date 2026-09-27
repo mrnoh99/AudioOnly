@@ -5,6 +5,8 @@ enum JobSource {
     case youtube(url: String, outputTemplate: String, outputDirectory: URL)
     /// 이미 내려받은 로컬 파일에서 오디오 추출
     case localFile(input: URL, output: URL)
+    /// 저장된 오디오 파일의 음량을 `percent`% 올린다. `temp`에 쓴 뒤 원본과 바꾼다.
+    case volumeBoost(input: URL, percent: Int, temp: URL)
 }
 
 @MainActor
@@ -53,7 +55,7 @@ final class Job: ObservableObject, Identifiable {
         switch source {
         case .youtube(let url, _, _):
             return group.map { "재생목록: \($0)" } ?? url
-        case .localFile(let input, _):
+        case .localFile(let input, _), .volumeBoost(let input, _, _):
             return input.path
         }
     }
@@ -75,6 +77,16 @@ final class Job: ObservableObject, Identifiable {
 @MainActor
 final class JobQueue: ObservableObject {
     @Published private(set) var jobs: [Job] = []
+    /// 음량 올리기 창에 보여 줄 파일들 (메뉴 · 작업 목록에서 설정)
+    @Published var volumeBoostRequest: VolumeBoostRequest?
+
+    /// 파일을 골라 음량 올리기 창을 띄운다.
+    func chooseVolumeBoostFiles(in directory: URL) {
+        let files = VolumeBoostPicker.chooseFiles(in: directory)
+        if !files.isEmpty {
+            volumeBoostRequest = VolumeBoostRequest(files: files)
+        }
+    }
 
     var maxConcurrent = 2 {
         didSet { pump() }
@@ -176,6 +188,21 @@ enum JobRunner {
             executable = ffmpeg
             arguments = FFmpegCommand.extractArguments(input: input, output: output, options: job.options)
             isYouTube = false
+
+        case .volumeBoost(let input, let percent, let temp):
+            guard let ffmpeg = job.options.ffmpegURL else {
+                job.status = .failed("ffmpeg를 찾을 수 없습니다. (brew install ffmpeg)")
+                return
+            }
+            executable = ffmpeg
+            arguments = VolumeBoostCommand.arguments(input: input, output: temp, percent: percent)
+            isYouTube = false
+        }
+        defer {
+            // 음량 올리기가 끝나지 못했으면 임시 파일을 지운다.
+            if case .volumeBoost(_, _, let temp) = job.source, job.status != .done {
+                try? FileManager.default.removeItem(at: temp)
+            }
         }
 
         do {
@@ -200,6 +227,9 @@ enum JobRunner {
                     }
                 case .localFile(_, let output):
                     job.outputURL = output
+                case .volumeBoost(let input, _, let temp):
+                    try replace(input, with: temp)
+                    job.outputURL = input
                 }
                 job.progress = 1
                 job.status = .done
@@ -211,6 +241,16 @@ enum JobRunner {
         } catch {
             job.log = state.logLines
             job.status = .failed(error.localizedDescription)
+        }
+    }
+
+    /// 원본 파일을 음량을 올린 파일로 바꾼다. 파일 날짜는 원본 그대로 둔다.
+    private static func replace(_ original: URL, with newFile: URL) throws {
+        let fm = FileManager.default
+        let modified = try? original.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        _ = try fm.replaceItemAt(original, withItemAt: newFile)
+        if let modified {
+            try? fm.setAttributes([.modificationDate: modified], ofItemAtPath: original.path)
         }
     }
 

@@ -39,6 +39,12 @@ struct ContentView: View {
             Divider()
             CreditFooter()
         }
+        .sheet(item: $queue.volumeBoostRequest) { request in
+            VolumeBoostSheet(files: request.files)
+                .environmentObject(settings)
+                .environmentObject(tools)
+                .environmentObject(queue)
+        }
         .onAppear { queue.maxConcurrent = settings.maxConcurrent }
         .onReceive(settings.$maxConcurrent) { queue.maxConcurrent = $0 }
     }
