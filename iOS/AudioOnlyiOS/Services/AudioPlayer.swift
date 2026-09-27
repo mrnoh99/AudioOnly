@@ -210,7 +210,7 @@ final class AudioPlayer: ObservableObject {
         if isWaitingForCloud {
             // 아직 iCloud에서 받는 중: 다 받으면 재생
             playWhenDownloaded = true
-            CloudDownloadManager.shared.request([item.url])
+            CloudDownloadManager.shared.request([item.url], priority: true)
             return
         }
         activateSession()
@@ -438,7 +438,7 @@ final class AudioPlayer: ObservableObject {
             currentTime = 0
             duration = 0
             info = TrackInfo(title: item.name, artist: item.folder, artwork: nil, duration: 0)
-            CloudDownloadManager.shared.request([item.url])
+            CloudDownloadManager.shared.request([item.url], priority: true)
             updateNowPlaying()
             return
         }

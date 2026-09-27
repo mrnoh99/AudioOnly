@@ -340,7 +340,7 @@ struct LibraryRowView: View {
         .contextMenu {
             if item.isCloudOnly {
                 Button {
-                    CloudDownloadManager.shared.request([item.url])
+                    CloudDownloadManager.shared.request([item.url], priority: true)
                 } label: {
                     Label("iCloud에서 받기 (Wi-Fi)", systemImage: "icloud.and.arrow.down")
                 }

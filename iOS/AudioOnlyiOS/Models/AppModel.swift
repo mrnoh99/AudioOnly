@@ -686,7 +686,14 @@ final class AppModel: ObservableObject {
     func setActive(_ active: Bool) {
         periodicTask?.cancel()
         periodicTask = nil
-        guard active else { return }
+        // iOS에서는 백그라운드에 있는 동안 파일 프레젠터를 내려 두어야 한다. 그대로 두면 다른 프로세스
+        // (iCloud 동기화 · 파일 앱)의 파일 조정이 잠든 앱의 응답을 기다리며 막힐 수 있다.
+        guard active else {
+            watcher?.stop()
+            watcher = nil
+            return
+        }
+        startWatching()
         refreshLibrary()
         cloud.networkChanged()
         periodicTask = Task { [weak self] in

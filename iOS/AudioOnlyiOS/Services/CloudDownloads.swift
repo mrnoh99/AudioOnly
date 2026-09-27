@@ -75,6 +75,18 @@ final class CloudDownloadManager: ObservableObject {
     private var sizes: [URL: Int64] = [:]
     /// iCloud 메타데이터에서 읽은 받은 비율(0…1)
     private var reportedPercent: [URL: Double] = [:]
+    /// 재생하려는 곡처럼 바로 필요한 파일. 이 파일들만 파일 조정자로 '다 받을 때까지 기다리기'를 한다.
+    private var priority: Set<URL> = []
+    /// 파일 조정자 읽기는 받을 때까지 스레드를 붙잡고 있으므로 동시에 2개까지만 한다.
+    /// (자동 받기로 수십 개를 한꺼번에 기다리면 스레드가 고갈되고, 앱이 백그라운드로 갈 때
+    /// 시스템이 한꺼번에 취소한다 — grantAccessClaim … Code=3072)
+    private let coordinationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 2
+        queue.qualityOfService = .userInitiated
+        queue.name = "AudioOnly.CloudCoordination"
+        return queue
+    }()
     private var query: NSMetadataQuery?
     private var queryObservers: [NSObjectProtocol] = []
 
@@ -93,10 +105,16 @@ final class CloudDownloadManager: ObservableObject {
     }
 
     /// 받아 달라고 요청. Wi-Fi면 바로, 아니면 Wi-Fi에 연결될 때 시작한다.
-    func request(_ urls: [URL]) {
+    /// `priority`: 지금 재생하려는 곡처럼 바로 필요한 파일(다 받는 순간을 곧바로 알아챈다).
+    func request(_ urls: [URL], priority isPriority: Bool = false) {
         for raw in urls {
             let url = raw.standardizedFileURL
             guard CloudFiles.needsDownload(url) else { continue }
+            if isPriority && !priority.contains(url) {
+                priority.insert(url)
+                // 이미 받는 중이면 기다리기만 추가한다.
+                if case .downloading? = states[url] { coordinateRead(url) }
+            }
             switch states[url] {
             case .downloading?, .waitingForWiFi?:
                 continue
@@ -111,6 +129,7 @@ final class CloudDownloadManager: ObservableObject {
     func cancel(_ url: URL) {
         let key = url.standardizedFileURL
         states[key] = nil
+        priority.remove(key)
         startedAt[key] = nil
         reportedPercent[key] = nil
         updateQuery()
@@ -148,7 +167,7 @@ final class CloudDownloadManager: ObservableObject {
                 try FileManager.default.startDownloadingUbiquitousItem(at: url)
                 states[url] = .downloading(nil)
                 startedAt[url] = Date()
-                coordinateRead(url)
+                if priority.contains(url) { coordinateRead(url) }
             } catch {
                 states[url] = .failed(error.localizedDescription)
             }
@@ -160,10 +179,12 @@ final class CloudDownloadManager: ObservableObject {
     /// 파일 조정자로 읽기를 요청하면 시스템이 파일을 끝까지 받아 온 뒤 돌려준다.
     /// 상태 값이 늦게 바뀌어도 '다 받음'을 바로 알 수 있다.
     private func coordinateRead(_ url: URL) {
-        DispatchQueue.global(qos: .userInitiated).async {
+        coordinationQueue.addOperation {
             var error: NSError?
             NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &error) { _ in }
-            let failed = error?.localizedDescription
+            // 취소(앱이 백그라운드로 가는 등)는 실패가 아니다 — 받기는 계속되고 주기적 확인이 끝을 알아챈다.
+            let cancelled = error.map { $0.domain == NSCocoaErrorDomain && $0.code == NSUserCancelledError } ?? false
+            let failed = cancelled ? nil : error?.localizedDescription
             Task { @MainActor in
                 CloudDownloadManager.shared.coordinatedReadFinished(url, error: failed)
             }
@@ -173,6 +194,7 @@ final class CloudDownloadManager: ObservableObject {
     private func coordinatedReadFinished(_ url: URL, error: String?) {
         guard case .downloading = states[url] else { return }
         if let error, CloudFiles.needsDownload(url) {
+            priority.remove(url)
             states[url] = .failed(error)
         } else if !CloudFiles.needsDownload(url) {
             finish(url)
@@ -180,6 +202,7 @@ final class CloudDownloadManager: ObservableObject {
     }
 
     private func finish(_ url: URL) {
+        priority.remove(url)
         states[url] = nil
         startedAt[url] = nil
         reportedPercent[url] = nil
@@ -244,7 +267,8 @@ final class CloudDownloadManager: ObservableObject {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.poll() else { break }
-                try? await Task.sleep(for: .milliseconds(500))
+                // 받는 파일이 많으면 조금 느긋하게 확인한다.
+                try? await Task.sleep(for: .milliseconds(self.downloadingCount > 5 ? 1500 : 500))
             }
             self?.pollTask = nil
         }
@@ -258,6 +282,7 @@ final class CloudDownloadManager: ObservableObject {
             if !CloudFiles.needsDownload(url) {
                 finish(url)
             } else if let error = CloudFiles.downloadError(url) {
+                priority.remove(url)
                 states[url] = .failed(error)
             } else {
                 // iCloud가 알려 준 비율을 우선 쓰고, 없으면 기기에 채워진 크기로 추정한다.
