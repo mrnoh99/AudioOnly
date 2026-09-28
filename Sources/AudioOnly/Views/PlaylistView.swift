@@ -117,6 +117,11 @@ struct PlaylistView: View {
     private func load() {
         let target = trimmedURL
         guard !target.isEmpty, !isLoading else { return }
+        // 주소가 아닌 글(클립보드에 남아 있던 다른 내용 등)은 yt-dlp에 넘기지 않는다.
+        guard target.hasPrefix("http://") || target.hasPrefix("https://"), !target.contains(where: \.isWhitespace) else {
+            errorMessage = "YouTube 재생목록 주소가 아닙니다. https://www.youtube.com/playlist?list=… 형식의 주소를 붙여넣으세요."
+            return
+        }
         let options = settings.makeOptions(tools: tools)
         isLoading = true
         errorMessage = nil
