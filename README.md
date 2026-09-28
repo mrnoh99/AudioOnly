@@ -61,7 +61,8 @@ UNIVERSAL=1 DMG=1 ./scripts/build-app.sh
 
 GitHub Actions(`.github/workflows/build.yml`)가 푸시할 때마다 유니버설 `AudioOnly.zip` / `AudioOnly.dmg`와 iOS용 서명 안 된 `.ipa`를 빌드해서 아티팩트로 올립니다.
 `main`에 올라간 빌드는 [**Releases → latest**](https://github.com/mrnoh99/AudioOnly/releases/tag/latest)에 자동으로 게시됩니다.
-ad-hoc 서명만 된 앱이라 처음 열 때 Gatekeeper가 막으면 Finder에서 **우클릭 → 열기**를 누르거나 다음을 실행하세요.
+ad-hoc 서명만 된 앱이라 처음 열면 “Apple could not verify … is free of malware” 경고가 나옵니다. macOS 15 이후에는 우클릭 → 열기로 넘어갈 수 없으니,
+**완료**를 누른 뒤 **시스템 설정 → 개인정보 보호 및 보안** 맨 아래의 **그래도 열기**를 누르고 암호를 입력하세요. 또는 터미널에서 다음을 실행하세요.
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/AudioOnly.app
