@@ -176,11 +176,11 @@ struct ScreenView: View {
 
     var body: some View {
         content
-            // 어느 화면에서든 아래쪽에 미니 플레이어
+            // 어느 화면에서든 아래쪽에 미니 플레이어. 보관함은 목록 안쪽에 직접 붙인다
+            // (NavigationStack 바깥에 붙이면 목록 끝이 막대 밑에 가려져 누를 수 없다).
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
-                    MiniPlayerBar()
-                    CreditFooter()
+                if tab != .library {
+                    BottomPlayerBars()
                 }
             }
     }
@@ -193,6 +193,16 @@ struct ScreenView: View {
         case .files: LocalFilesView()
         case .library: LibraryView()
         case .settings: SettingsView()
+        }
+    }
+}
+
+/// 화면 아래쪽의 미니 플레이어와 제작자 표시
+struct BottomPlayerBars: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            MiniPlayerBar()
+            CreditFooter()
         }
     }
 }

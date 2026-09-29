@@ -174,6 +174,8 @@ struct LibraryView: View {
             }
             .refreshable { model.refreshLibrary() }
             .onAppear { model.refreshLibrary() }
+            // 목록 끝이 미니 플레이어에 가려지지 않도록 목록에 직접 붙인다.
+            .safeAreaInset(edge: .bottom, spacing: 0) { BottomPlayerBars() }
         }
     }
 
@@ -224,6 +226,7 @@ struct FolderDetailView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { BottomPlayerBars() }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
